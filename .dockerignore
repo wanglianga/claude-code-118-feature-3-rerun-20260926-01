@@ -1,0 +1,12 @@
+.git
+node_modules
+**/node_modules
+**/dist
+web/dist
+server/dist
+data
+*.log
+.env
+.claude
+CLAUDE.md
+README.md

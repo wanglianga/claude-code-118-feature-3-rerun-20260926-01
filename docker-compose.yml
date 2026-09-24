@@ -1,0 +1,20 @@
+# 城市工地围挡公益广告排期与验收系统
+# 单服务一体化部署：app 同时提供 API 与前端静态页；数据经 named volume 持久化
+services:
+  app:
+    build: .
+    image: ${COMPOSE_PROJECT_NAME:-hoarding-ads}-app
+    container_name: ${COMPOSE_PROJECT_NAME:-hoarding-ads}-app
+    ports:
+      # 仅把应用端口发布到宿主（宿主端口由 CC_PUBLISH_PORT 指定）
+      - "${CC_PUBLISH_PORT}:3000"
+    environment:
+      PORT: 3000
+      DATA_DIR: /app/data
+      SESSION_SECRET: ${SESSION_SECRET:-hoarding-demo-secret-change-me}
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  app-data:
