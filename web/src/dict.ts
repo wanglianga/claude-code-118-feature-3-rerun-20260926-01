@@ -1,4 +1,4 @@
-import { Role, SubmissionStatus, SubmissionType, TicketStatus, TicketType, TaskStatus, CreativeKind } from './types';
+import { CostBearer, RelayoutReason, RelayoutStatus, Role, SubmissionStatus, SubmissionType, TicketStatus, TicketType, TaskStatus, CreativeKind } from './types';
 
 export const ROLE_LABEL: Record<Role, string> = {
   ad_company: '广告公司', street: '街道', reviewer: '审核人员',
@@ -25,11 +25,35 @@ export const STATUS_COLOR: Record<SubmissionStatus, string> = {
 };
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
-  pending: '待领取', claimed: '已领取', reported: '已上报',
+  pending: '待领取', claimed: '已领取', reported: '已上报', cancelled: '已取消',
 };
 
 export const TASK_STATUS_COLOR: Record<TaskStatus, string> = {
-  pending: 'default', claimed: 'processing', reported: 'success',
+  pending: 'default', claimed: 'processing', reported: 'success', cancelled: 'default',
+};
+
+/** 围挡重排：变更原因 */
+export const RELAYOUT_REASON_LABEL: Record<RelayoutReason, string> = {
+  construction: '施工方原因', ad_company: '广告公司要求',
+  street: '街道/市政要求', force_majeure: '不可抗力',
+};
+
+/** 围挡重排：费用承担方 */
+export const COST_BEARER_LABEL: Record<CostBearer, string> = {
+  construction: '施工方承担（单独结算）', ad_company: '广告公司承担（计入合同扣款）',
+  street: '街道/市政承担（单独结算）', shared: '双方各半（50% 扣款 + 50% 单独结算）',
+};
+
+export const COST_BEARER_SHORT: Record<CostBearer, string> = {
+  construction: '施工方', ad_company: '广告公司', street: '街道/市政', shared: '双方各半',
+};
+
+export const RELAYOUT_STATUS_LABEL: Record<RelayoutStatus, string> = {
+  pending_confirm: '待广告公司确认', confirmed: '已确认', rejected: '已驳回',
+};
+
+export const RELAYOUT_STATUS_COLOR: Record<RelayoutStatus, string> = {
+  pending_confirm: 'warning', confirmed: 'success', rejected: 'error',
 };
 
 export const TICKET_TYPE_LABEL: Record<TicketType, string> = {

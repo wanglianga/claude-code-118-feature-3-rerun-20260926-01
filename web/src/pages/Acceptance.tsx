@@ -21,7 +21,8 @@ export default function AcceptancePage() {
   const inspectors = users.filter(u => u.role === 'inspector');
 
   const openAccept = (s: Submission) => {
-    const myTasks = tasks.filter(t => t.submissionId === s.id);
+    // 仅统计当前边界内的任务（排除重排取消/移除编号的旧任务）
+    const myTasks = tasks.filter(t => t.submissionId === s.id && t.status !== 'cancelled' && s.hoardingNos.includes(t.hoardingNo));
     const actual = myTasks.reduce((sum, t) => sum + (t.report?.actualLength || 0), 0);
     setCurrent(s);
     form.setFieldsValue({
@@ -49,7 +50,7 @@ export default function AcceptancePage() {
     }
   };
 
-  const curTasks = current ? tasks.filter(t => t.submissionId === current.id) : [];
+  const curTasks = current ? tasks.filter(t => t.submissionId === current.id && t.status !== 'cancelled' && current.hoardingNos.includes(t.hoardingNo)) : [];
   const curActual = curTasks.reduce((sum, t) => sum + (t.report?.actualLength || 0), 0);
   const curOpenTickets = current ? tickets.filter(t => t.submissionId === current.id && t.status !== 'closed') : [];
 
@@ -70,7 +71,7 @@ export default function AcceptancePage() {
             {
               title: '实际上报', width: 100,
               render: (_, s) => {
-                const actual = tasks.filter(t => t.submissionId === s.id).reduce((sum, t) => sum + (t.report?.actualLength || 0), 0);
+                const actual = tasks.filter(t => t.submissionId === s.id && t.status !== 'cancelled' && s.hoardingNos.includes(t.hoardingNo)).reduce((sum, t) => sum + (t.report?.actualLength || 0), 0);
                 return <span style={{ color: Math.abs(actual - s.contractLength) > 0.5 ? '#cf1322' : undefined }}>{actual}m</span>;
               },
             },

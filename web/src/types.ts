@@ -46,7 +46,7 @@ export interface Submission {
   status: SubmissionStatus; review?: Review; createdAt: string; history: HistoryItem[];
 }
 
-export type TaskStatus = 'pending' | 'claimed' | 'reported';
+export type TaskStatus = 'pending' | 'claimed' | 'reported' | 'cancelled';
 
 export interface InstallReport {
   beforePhotos: string[]; afterPhotos: string[]; actualLength: number; gaps: string;
@@ -57,6 +57,7 @@ export interface InstallReport {
 export interface InstallTask {
   id: string; code: string; submissionId: string; roadSegment: string; hoardingNo: string;
   teamId: string; status: TaskStatus; claimedAt?: string; report?: InstallReport;
+  kind?: 'install' | 'reinstall'; relayoutId?: string; fromHoardingNo?: string; cost?: number;
 }
 
 export type TicketType = 'temporary_change' | 'wind_damage' | 'ratio_violation' | 'early_removal' | 'dirty' | 'length_mismatch';
@@ -100,4 +101,57 @@ export interface Inspection {
 export interface Bootstrap {
   users: SafeUser[]; submissions: Submission[]; tasks: InstallTask[];
   tickets: Ticket[]; acceptances: Acceptance[]; inspections: Inspection[];
+  relayouts: Relayout[]; contractChanges: ContractChange[]; reinstallSettlements: ReinstallSettlement[];
+}
+
+// ============ 工地改围挡重排 ============
+
+export type RelayoutReason = 'construction' | 'ad_company' | 'street' | 'force_majeure';
+export type CostBearer = 'construction' | 'ad_company' | 'street' | 'shared';
+export type RelayoutStatus = 'pending_confirm' | 'confirmed' | 'rejected';
+
+export interface AffectedCreative {
+  id: string; title: string; kind: CreativeKind; width: number; reason: string;
+}
+
+export interface Relayout {
+  id: string; code: string; submissionId: string;
+  reason: RelayoutReason; responsibility: string;
+  oldHoardingNos: string[]; newHoardingNos: string[];
+  oldLength: number; newLength: number; newInstallDate: string; note?: string;
+  availableLength: number; affectedCreatives: AffectedCreative[];
+  removedNos: string[]; addedNos: string[];
+  cancelTaskCount: number; reinstallTaskCount: number; reinstallCost: number;
+  costBearer: CostBearer; adCompanyDeduction: number; separateAmount: number;
+  status: RelayoutStatus;
+  raisedBy: string; raisedByName: string; createdAt: string;
+  confirmedBy?: string; confirmedByName?: string; confirmedAt?: string;
+  rejectNote?: string; contractChangeId?: string;
+}
+
+export interface ContractChange {
+  id: string; code: string; submissionId: string; relayoutId: string;
+  reason: RelayoutReason; responsibility: string;
+  oldContractLength: number; newContractLength: number;
+  oldContractArea: number; newContractArea: number;
+  costBearer: CostBearer; reinstallCost: number;
+  adCompanyDeduction: number; separateAmount: number;
+  separateSettlementId?: string;
+  confirmedBy: string; confirmedByName: string; time: string;
+}
+
+export interface ReinstallSettlement {
+  id: string; code: string; submissionId: string; relayoutId: string; contractChangeId: string;
+  bearerRole: 'construction' | 'street'; bearerName: string;
+  amount: number; responsibility: string;
+  status: 'pending' | 'settled';
+  createdAt: string; settledAt?: string; settledBy?: string;
+}
+
+/** 重排试算结果（/api/relayouts/preview） */
+export interface RelayoutPreview {
+  availableLength: number; affectedCreatives: AffectedCreative[];
+  removedNos: string[]; addedNos: string[];
+  cancelTaskCount: number; reinstallTaskCount: number; reinstallCost: number;
+  bearer: CostBearer; adCompanyDeduction: number; separateAmount: number;
 }

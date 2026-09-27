@@ -46,7 +46,7 @@ export default function SchedulePage() {
             {
               title: '安装进度', width: 110,
               render: (_, s) => {
-                const ts = tasks.filter(t => t.submissionId === s.id);
+                const ts = tasks.filter(t => t.submissionId === s.id && t.status !== 'cancelled' && s.hoardingNos.includes(t.hoardingNo));
                 if (!ts.length) return '—';
                 const done = ts.filter(t => t.status === 'reported').length;
                 return <Tag color={done === ts.length ? 'success' : 'processing'}>{done}/{ts.length}</Tag>;

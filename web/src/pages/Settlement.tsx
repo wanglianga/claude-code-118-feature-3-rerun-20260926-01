@@ -7,13 +7,15 @@ import { ROLE_LABEL } from '../dict';
 
 /** 结算中心：财务确认结算；广告公司查看可结算面积与扣款明细 */
 export default function SettlementPage() {
-  const { user, acceptances, submissions, act } = useStore();
+  const { user, acceptances, submissions, reinstallSettlements, act } = useStore();
   const [detail, setDetail] = useState<Acceptance | null>(null);
   const [busy, setBusy] = useState(false);
 
   const isFinance = user?.role === 'finance';
   const mySubs = submissions.filter(s => s.submitterId === user?.id).map(s => s.id);
   const visible = isFinance ? acceptances : acceptances.filter(a => mySubs.includes(a.submissionId));
+  // 拆装费用单独结算：施工方/街道原因的拆装费不占广告公司合同款，单独结算；广告公司可查看责任说明
+  const visibleReinstall = isFinance ? reinstallSettlements : reinstallSettlements.filter(r => mySubs.includes(r.submissionId));
 
   const subOf = (a: Acceptance) => submissions.find(s => s.id === a.submissionId);
 
@@ -30,6 +32,21 @@ export default function SettlementPage() {
           message.error(e.message);
         } finally {
           setBusy(false);
+        }
+      },
+    });
+  };
+
+  const settleReinstall = (id: string, code: string, amount: number, bearerName: string) => {
+    Modal.confirm({
+      title: '确认拆装费用单独结算？',
+      content: `结算单 ${code}：¥${amount}，由 ${bearerName} 承担（不占广告公司合同款）。`,
+      onOk: async () => {
+        try {
+          await act(() => api.settleReinstall(id));
+          message.success('拆装费用单独结算完成');
+        } catch (e: any) {
+          message.error(e.message);
         }
       },
     });
@@ -66,6 +83,37 @@ export default function SettlementPage() {
                   )}
                 </Space>
               ),
+            },
+          ]}
+        />
+      </Card>
+
+      <Card
+        size="small" style={{ marginTop: 16 }}
+        title={`围挡重排拆装费用 · 单独结算（${visibleReinstall.length}）`}
+        extra={<Typography.Text type="secondary">施工方/街道原因造成的拆装费用单独结算，不占用广告公司合同款</Typography.Text>}
+      >
+        <Table
+          rowKey="id" size="small" dataSource={visibleReinstall}
+          locale={{ emptyText: '暂无拆装单独结算单' }}
+          columns={[
+            { title: '结算单号', dataIndex: 'code', width: 115 },
+            {
+              title: '关联排期', ellipsis: true,
+              render: (_, r) => { const s = submissions.find(x => x.id === r.submissionId); return s ? `${s.code} ${s.title}` : r.submissionId; },
+            },
+            { title: '费用承担方', dataIndex: 'bearerName', width: 150, render: (v, r) => <Tag color={r.bearerRole === 'construction' ? 'geekblue' : 'green'}>{v}</Tag> },
+            { title: '金额', dataIndex: 'amount', width: 100, render: v => <b>¥{v}</b> },
+            { title: '责任说明', dataIndex: 'responsibility', ellipsis: true },
+            {
+              title: '状态', dataIndex: 'status', width: 90,
+              render: v => v === 'settled' ? <Tag color="success">已结算</Tag> : <Tag color="gold">待结算</Tag>,
+            },
+            {
+              title: '操作', width: 110,
+              render: (_, r) => isFinance && r.status === 'pending'
+                ? <Button size="small" type="primary" onClick={() => settleReinstall(r.id, r.code, r.amount, r.bearerName)}>确认结算</Button>
+                : (r.settledAt ? <Typography.Text type="secondary">{r.settledBy} {r.settledAt}</Typography.Text> : '—'),
             },
           ]}
         />

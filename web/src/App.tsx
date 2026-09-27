@@ -4,7 +4,7 @@ import { Avatar, Button, Layout, Menu, Space, Tag, Typography, message } from 'a
 import {
   DashboardOutlined, FileAddOutlined, AuditOutlined, ToolOutlined, CheckSquareOutlined,
   AlertOutlined, AccountBookOutlined, EnvironmentOutlined, ShopOutlined, ScheduleOutlined,
-  LogoutOutlined, ReloadOutlined, UserOutlined,
+  LogoutOutlined, ReloadOutlined, UserOutlined, SwapOutlined,
 } from '@ant-design/icons';
 import { useStore } from './store';
 import { ROLE_LABEL } from './dict';
@@ -21,6 +21,7 @@ import InspectionPage from './pages/Inspection';
 import StreetView from './pages/StreetView';
 import MerchantPage from './pages/Merchant';
 import SchedulePage from './pages/Schedule';
+import RelayoutPage from './pages/Relayout';
 
 interface MenuDef { key: string; label: string; icon: React.ReactNode; roles: Role[] }
 
@@ -30,6 +31,7 @@ const MENUS: MenuDef[] = [
   { key: '/submit', label: '提交画面', icon: <FileAddOutlined />, roles: ['ad_company', 'street'] },
   { key: '/review', label: '审核中心', icon: <AuditOutlined />, roles: ['reviewer'] },
   { key: '/tasks', label: '安装任务', icon: <ToolOutlined />, roles: ['construction'] },
+  { key: '/relayout', label: '围挡重排', icon: <SwapOutlined />, roles: ['ad_company', 'street', 'construction', 'finance'] },
   { key: '/acceptance', label: '验收中心', icon: <CheckSquareOutlined />, roles: ['reviewer', 'street'] },
   { key: '/inspection', label: '巡检中心', icon: <EnvironmentOutlined />, roles: ['inspector'] },
   { key: '/settlement', label: '结算中心', icon: <AccountBookOutlined />, roles: ['finance', 'ad_company'] },
@@ -89,6 +91,7 @@ function Shell() {
             <Route path="/submit" element={<SubmitPage />} />
             <Route path="/review" element={<ReviewPage />} />
             <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/relayout" element={<RelayoutPage />} />
             <Route path="/acceptance" element={<AcceptancePage />} />
             <Route path="/inspection" element={<InspectionPage />} />
             <Route path="/settlement" element={<SettlementPage />} />

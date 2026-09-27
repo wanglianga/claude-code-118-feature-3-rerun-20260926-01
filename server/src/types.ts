@@ -111,7 +111,7 @@ export interface Submission {
   history: HistoryItem[];
 }
 
-export type TaskStatus = 'pending' | 'claimed' | 'reported';
+export type TaskStatus = 'pending' | 'claimed' | 'reported' | 'cancelled';
 
 export interface InstallReport {
   beforePhotos: string[];       // 安装前照片
@@ -136,6 +136,11 @@ export interface InstallTask {
   status: TaskStatus;
   claimedAt?: string;
   report?: InstallReport;
+  // 围挡重排扩展
+  kind?: 'install' | 'reinstall'; // 拆装任务（重排生成），缺省为普通安装
+  relayoutId?: string;            // 来源重排单
+  fromHoardingNo?: string;        // 拆装来源围挡编号
+  cost?: number;                  // 拆装费用（元，仅拆装任务）
 }
 
 /** 异常工单类型 */
@@ -249,5 +254,107 @@ export interface DB {
   tickets: Ticket[];
   acceptances: Acceptance[];
   inspections: Inspection[];
+  relayouts: Relayout[];
+  contractChanges: ContractChange[];
+  reinstallSettlements: ReinstallSettlement[];
   seq: Record<string, number>;
+}
+
+// ============ 工地改围挡重排 ============
+
+/** 变更原因（决定拆装费用责任） */
+export type RelayoutReason =
+  | 'construction'    // 施工方原因 → 施工方承担，单独结算
+  | 'ad_company'      // 广告公司要求 → 广告公司承担，计入合同扣款
+  | 'street'          // 街道/市政要求 → 街道（市政）承担，单独结算
+  | 'force_majeure';  // 不可抗力 → 双方各半
+
+/** 费用承担方（由变更原因推导） */
+export type CostBearer = 'construction' | 'ad_company' | 'street' | 'shared';
+
+export type RelayoutStatus = 'pending_confirm' | 'confirmed' | 'rejected';
+
+/** 受影响画面（按围挡长度顺序铺贴，超出新边界的画面） */
+export interface AffectedCreative {
+  id: string;
+  title: string;
+  kind: CreativeKind;
+  width: number;        // 画面宽度（米）
+  reason: string;       // 受影响原因
+}
+
+/** 围挡重排单：施工方临时调整围挡边界 */
+export interface Relayout {
+  id: string;
+  code: string;                 // 重排单号 CP-2026-XXXX
+  submissionId: string;
+  // 调整内容
+  reason: RelayoutReason;
+  responsibility: string;       // 责任说明（进入合同变更记录）
+  oldHoardingNos: string[];
+  newHoardingNos: string[];
+  oldLength: number;            // 原围挡长度（米）
+  newLength: number;            // 新围挡边界长度（米）
+  newInstallDate: string;       // 重排后计划安装/拆装时间
+  note?: string;
+  // 页面重算结果（发起时计算并保存）
+  availableLength: number;      // 重排后可用广告长度（米）
+  affectedCreatives: AffectedCreative[]; // 受影响画面
+  removedNos: string[];         // 被移除的围挡编号
+  addedNos: string[];           // 新增的围挡编号
+  cancelTaskCount: number;      // 将取消的未安装任务数
+  reinstallTaskCount: number;   // 已安装受影响 → 将生成的拆装任务数
+  reinstallCost: number;        // 拆装费用合计（元）
+  costBearer: CostBearer;       // 费用承担方
+  adCompanyDeduction: number;   // 其中计入广告公司合同扣款（元）
+  separateAmount: number;       // 其中单独结算金额（元）
+  // 流转
+  status: RelayoutStatus;
+  raisedBy: string;
+  raisedByName: string;
+  createdAt: string;
+  confirmedBy?: string;
+  confirmedByName?: string;
+  confirmedAt?: string;
+  rejectNote?: string;
+  contractChangeId?: string;    // 确认后生成的合同变更记录
+}
+
+/** 合同变更记录：重排确认后写入，含责任说明 */
+export interface ContractChange {
+  id: string;
+  code: string;                 // 变更编号 BG-2026-XXXX
+  submissionId: string;
+  relayoutId: string;
+  reason: RelayoutReason;
+  responsibility: string;       // 责任说明
+  oldContractLength: number;
+  newContractLength: number;
+  oldContractArea: number;      // 原合同面积（m²）
+  newContractArea: number;      // 新合同面积（m²）
+  costBearer: CostBearer;
+  reinstallCost: number;        // 拆装费用合计（元）
+  adCompanyDeduction: number;   // 计入广告公司扣款（元）
+  separateAmount: number;       // 单独结算金额（元）
+  separateSettlementId?: string;
+  confirmedBy: string;
+  confirmedByName: string;
+  time: string;
+}
+
+/** 拆装费用单独结算单：施工方/街道原因造成的拆装费用不占用广告公司合同结算，单独结算 */
+export interface ReinstallSettlement {
+  id: string;
+  code: string;                 // 结算单号 DC-2026-XXXX
+  submissionId: string;
+  relayoutId: string;
+  contractChangeId: string;
+  bearerRole: 'construction' | 'street'; // 费用承担方
+  bearerName: string;           // 承担方名称（施工队/街道）
+  amount: number;
+  responsibility: string;       // 责任说明（广告公司可查看）
+  status: 'pending' | 'settled';
+  createdAt: string;
+  settledAt?: string;
+  settledBy?: string;
 }

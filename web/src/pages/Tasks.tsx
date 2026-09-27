@@ -47,11 +47,22 @@ export default function TasksPage() {
     { title: '任务号', dataIndex: 'code', width: 110 },
     { title: '排期单', render: (_: unknown, t: InstallTask) => { const s = subOf(t); return s ? `${s.code} ${s.title}` : t.submissionId; }, ellipsis: true },
     { title: '路段', dataIndex: 'roadSegment', width: 120 },
-    { title: '围挡编号', dataIndex: 'hoardingNo', width: 90 },
+    {
+      title: '围挡编号', dataIndex: 'hoardingNo', width: 130,
+      render: (v: string, t: InstallTask) => (
+        <Space size={4}>
+          {v}
+          {t.kind === 'reinstall' && <Tag color="orange">拆装{t.fromHoardingNo ? `（自${t.fromHoardingNo}）` : ''}</Tag>}
+        </Space>
+      ),
+    },
     { title: '状态', dataIndex: 'status', width: 80, render: (v: any) => <TaskStatusTag s={v} /> },
   ];
 
   const pendingCols = [...baseColumns, {
+    title: '拆装费用', width: 90,
+    render: (_: unknown, t: InstallTask) => t.kind === 'reinstall' && t.cost ? `¥${t.cost}` : '—',
+  }, {
     title: '操作', width: 90,
     render: (_: unknown, t: InstallTask) => <Button type="primary" size="small" onClick={() => claim(t)}>领取任务</Button>,
   }];
@@ -92,7 +103,7 @@ export default function TasksPage() {
       </Card>
 
       <Modal
-        title={reportTask ? `上报安装情况：${reportTask.roadSegment} ${reportTask.hoardingNo}` : ''}
+        title={reportTask ? `${reportTask.kind === 'reinstall' ? '上报拆装情况' : '上报安装情况'}：${reportTask.roadSegment} ${reportTask.hoardingNo}${reportTask.fromHoardingNo ? `（自 ${reportTask.fromHoardingNo} 拆移）` : ''}` : ''}
         open={!!reportTask} onCancel={() => setReportTask(null)} onOk={submitReport}
         confirmLoading={busy} width={640} okText="提交上报"
       >

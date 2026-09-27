@@ -2,15 +2,15 @@ import { Card, Col, Descriptions, Drawer, Image, Row, Space, Statistic, Table, T
 import { CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
 import { useStore } from '../store';
 import { Submission } from '../types';
-import { RISK_COLOR, RISK_LABEL, ROLE_LABEL, TYPE_LABEL } from '../dict';
+import { COST_BEARER_SHORT, RELAYOUT_REASON_LABEL, RISK_COLOR, RISK_LABEL, ROLE_LABEL, TYPE_LABEL } from '../dict';
 import { KindTag, SubStatusTag, SubTypeTag, TaskStatusTag, TicketStatusTag, TicketTypeTag } from './Tags';
 
 const Check = ({ ok }: { ok: boolean }) =>
   ok ? <CheckCircleFilled style={{ color: '#52c41a' }} /> : <CloseCircleFilled style={{ color: '#ff4d4f' }} />;
 
-/** 排期单全景详情：提交信息 / 画面 / 审核 / 安装 / 工单 / 验收结算 / 流转记录 */
+/** 排期单全景详情：提交信息 / 画面 / 审核 / 安装 / 工单 / 验收结算 / 合同变更 / 流转记录 */
 export default function SubmissionDetail({ submission, open, onClose }: { submission: Submission | null; open: boolean; onClose: () => void }) {
-  const { users, tasks, tickets, acceptances } = useStore();
+  const { users, tasks, tickets, acceptances, contractChanges } = useStore();
   if (!submission) return null;
   const s = submission;
   const team = users.find(u => u.id === s.constructionTeamId);
@@ -18,7 +18,8 @@ export default function SubmissionDetail({ submission, open, onClose }: { submis
   const myTasks = tasks.filter(t => t.submissionId === s.id);
   const myTickets = tickets.filter(t => t.submissionId === s.id);
   const acc = acceptances.find(a => a.submissionId === s.id);
-  const actualTotal = myTasks.reduce((sum, t) => sum + (t.report?.actualLength || 0), 0);
+  const changes = contractChanges.filter(c => c.submissionId === s.id);
+  const actualTotal = myTasks.filter(t => t.status !== 'cancelled' && s.hoardingNos.includes(t.hoardingNo)).reduce((sum, t) => sum + (t.report?.actualLength || 0), 0);
 
   return (
     <Drawer
@@ -104,7 +105,15 @@ export default function SubmissionDetail({ submission, open, onClose }: { submis
             columns={[
               { title: '任务号', dataIndex: 'code', width: 110 },
               { title: '路段', dataIndex: 'roadSegment' },
-              { title: '围挡编号', dataIndex: 'hoardingNo', width: 90 },
+              {
+                title: '围挡编号', dataIndex: 'hoardingNo', width: 130,
+                render: (v, t) => (
+                  <Space size={4}>
+                    {v}
+                    {t.kind === 'reinstall' && <Tag color="orange">拆装{t.fromHoardingNo ? `（自${t.fromHoardingNo}）` : ''}</Tag>}
+                  </Space>
+                ),
+              },
               { title: '状态', dataIndex: 'status', width: 80, render: v => <TaskStatusTag s={v} /> },
               { title: '实际长度', width: 90, render: (_, t) => t.report ? `${t.report.actualLength}m` : '—' },
               { title: '缺口', width: 120, render: (_, t) => t.report?.gaps || '—' },
@@ -169,6 +178,30 @@ export default function SubmissionDetail({ submission, open, onClose }: { submis
               ))}
             </Descriptions.Item>
           </Descriptions>
+        </>
+      )}
+
+      {changes.length > 0 && (
+        <>
+          <Typography.Title level={5} style={{ marginTop: 24 }}>七、合同变更记录（围挡重排）</Typography.Title>
+          {changes.map(c => (
+            <Card key={c.id} size="small" style={{ marginBottom: 12 }}
+              title={<Space>{c.code}<Tag color="volcano">{RELAYOUT_REASON_LABEL[c.reason]}</Tag><Tag>{COST_BEARER_SHORT[c.costBearer]}承担</Tag></Space>}>
+              <Descriptions bordered size="small" column={2}>
+                <Descriptions.Item label="合同长度">{c.oldContractLength} → {c.newContractLength} 米</Descriptions.Item>
+                <Descriptions.Item label="合同面积">{c.oldContractArea} → {c.newContractArea} m²</Descriptions.Item>
+                <Descriptions.Item label="拆装费用">¥{c.reinstallCost}</Descriptions.Item>
+                <Descriptions.Item label="费用拆分">
+                  {c.adCompanyDeduction > 0 && <Typography.Text type="danger">广告公司扣款 ¥{c.adCompanyDeduction}　</Typography.Text>}
+                  {c.separateAmount > 0 && <Typography.Text style={{ color: '#1677ff' }}>单独结算 ¥{c.separateAmount}</Typography.Text>}
+                  {c.adCompanyDeduction === 0 && c.separateAmount === 0 && '无费用'}
+                </Descriptions.Item>
+                <Descriptions.Item label="责任说明" span={2}>{c.responsibility}</Descriptions.Item>
+                <Descriptions.Item label="确认人">{c.confirmedByName}</Descriptions.Item>
+                <Descriptions.Item label="确认时间">{c.time}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          ))}
         </>
       )}
 

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  Acceptance, DB, InstallTask, Inspection, Submission, Ticket, User,
+  Acceptance, ContractChange, DB, InstallTask, Inspection, ReinstallSettlement, Relayout, Submission, Ticket, User,
 } from './types';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -170,19 +170,19 @@ export function buildSeed(): DB {
       title: '恒信家居城国庆促销画面',
       submitterId: 'u_ad', submitterOrg: '诚信广告有限公司',
       siteName: '恒信家居城东广场工地', location: '来广营东路北侧',
-      roadSegment: '来广营东路', hoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-06'],
-      hoardingLength: 150, height: 2.5, publicRatio: 30,
+      roadSegment: '来广营东路', hoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-07'],
+      hoardingLength: 145, height: 2.5, publicRatio: 30,
       creatives: [
         { id: 'cr_0010', kind: 'public', title: '消防安全公益画面', sizeSpec: '6m×2.5m', textContent: '关注消防 生命至上', theme: '消防安全', sensitiveRisk: 'none', sightImpact: 'none', imageUrl: imgCreative2 },
         { id: 'cr_0011', kind: 'commercial', title: '恒信国庆促销画面', sizeSpec: '6m×2.5m', textContent: '国庆大放价 满 10000 减 1500', theme: '', brandName: '恒信家居', sensitiveRisk: 'none', sightImpact: 'none', imageUrl: imgCreative1 },
       ],
       approvalUnit: '市城管局审批中心',
-      plannedInstallDate: '2026-09-01', displayStart: '2026-09-05', displayEnd: '2026-11-05',
+      plannedInstallDate: '2026-09-28', displayStart: '2026-09-05', displayEnd: '2026-11-05',
       publicSlots: '每日 7:00-9:00、17:00-19:00 公益画面',
       nightLighting: true, lightingDesc: 'LED 灯带 18:30-22:00',
       constructionTeamId: 'u_tm',
-      acceptanceRequirements: '画面平整无破损，促销内容与时效一致',
-      merchantId: 'u_mc2', contractLength: 150, unitPrice: 160,
+      acceptanceRequirements: '画面平整无破损，促销内容与时效一致。【重排验收基准】2026-09-25 围挡边界调整：移除 LG-06、新增 LG-07，长度 150→145 米，按新边界验收。',
+      merchantId: 'u_mc2', contractLength: 145, unitPrice: 160,
       status: 'accepted',
       review: {
         reviewerId: 'u_rv',
@@ -195,6 +195,8 @@ export function buildSeed(): DB {
         { time: '2026-08-30 15:00', by: 'u_rv', byName: '陈正审', action: '审核通过', note: '已生成 6 个安装任务' },
         { time: '2026-09-04 17:30', by: 'u_tm', byName: '赵铁柱', action: '全部安装上报完成', note: '实际安装合计 150 米' },
         { time: '2026-09-06 10:30', by: 'u_rv', byName: '陈正审', action: '验收完成', note: '验收长度 150 米，扣款 800 元，待财务结算' },
+        { time: '2026-09-24 10:10', by: 'u_tm', byName: '赵铁柱', action: '发起围挡重排', note: 'CP-2026-0002：移除 LG-06、新增 LG-07，长度 150→145 米' },
+        { time: '2026-09-25 11:40', by: 'u_ad', byName: '李明辉', action: '确认围挡重排', note: '合同长度 150→145 米，生成 1 个拆装任务，变更记录 BG-2026-0001' },
       ],
     },
     {
@@ -264,10 +266,15 @@ export function buildSeed(): DB {
       rep(s4Lens[i], 'u_tm', '赵铁柱', `2026-09-1${i} 17:00`, i === 4 ? { gaps: 'FT-05 与绿化带交界处缩短 1.5m，现场有配电箱无法覆盖' } : undefined),
       `2026-09-1${i} 08:00`));
   });
-  // S5：6 个全部上报（合计 150m）
+  // S5：6 个全部上报（合计 150m）；重排后 LG-06 段移除，生成 LG-07 拆装任务
   ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-06'].forEach((no, i) => {
     tasks.push(mkTask('sub_000005', '来广营东路', no, 'u_tm', 'reported',
       rep(25, 'u_tm', '赵铁柱', `2026-09-0${i + 1} 16:30`), `2026-09-0${i + 1} 08:00`));
+  });
+  // S5 重排拆装任务：LG-06（已安装 25m）→ LG-07，费用由施工方承担
+  tasks.push({
+    ...mkTask('sub_000005', '来广营东路', 'LG-07', 'u_tm', 'pending'),
+    kind: 'reinstall', relayoutId: 'relayout_000002', fromHoardingNo: 'LG-06', cost: 1562.5,
   });
 
   // ============ 异常工单 ============
@@ -330,7 +337,7 @@ export function buildSeed(): DB {
   const acceptances: Acceptance[] = [
     {
       id: 'acc_000001', code: 'YS-2026-0001', submissionId: 'sub_000005',
-      acceptedLength: 150, contractLength: 150, height: 2.5,
+      acceptedLength: 150, contractLength: 145, height: 2.5,
       settleableArea: 375, publicArea: 112.5, commercialArea: 262.5,
       unitPrice: 160, grossAmount: 42000,
       deductions: [{ reason: '画面被风吹破（GD-2026-0001）', amount: 800, ticketId: 'ticket_000001' }],
@@ -346,7 +353,7 @@ export function buildSeed(): DB {
         { id: 'insp_000004', date: '2026-10-09', inspectorId: 'u_in', focus: '撤换前综合检查', status: 'planned' },
       ],
       status: 'pending_finance',
-      comment: '安装长度与合同一致，画面质量合格；存在 1 起破损已整改，扣款 800 元。',
+      comment: '安装长度与合同一致，画面质量合格；存在 1 起破损已整改，扣款 800 元。【重排同步】CP-2026-0002 合同长度 150→145 米，验收基准已更新。',
       acceptedBy: 'u_rv', acceptedByName: '陈正审', createdAt: '2026-09-06 10:30',
     },
   ];
@@ -364,11 +371,85 @@ export function buildSeed(): DB {
     { id: 'insp_rec_000004', planItemId: 'insp_000004', acceptanceId: 'acc_000001', submissionId: 'sub_000005', date: '2026-10-09', inspectorId: 'u_in', focus: '撤换前综合检查', status: 'planned' },
   ];
 
+  // ============ 围挡重排 ============
+  // CP-0001：待广告公司确认（S3 地铁17号线，施工方原因，移除 WJ-03/WJ-08、新增 WJ-09）
+  // CP-0002：已确认（S5 恒信家居，移除 LG-06、新增 LG-07，生成拆装任务与单独结算）
+  const relayouts: Relayout[] = [
+    {
+      id: 'relayout_000001', code: 'CP-2026-0001', submissionId: 'sub_000003',
+      reason: 'construction',
+      responsibility: '地铁17号线区间管线迁改，WJ-03、WJ-08 段围挡需拆除改线，新增 WJ-09 段；本次拆装由施工方原因引起，拆装费用由宏基围挡施工队自行承担，单独结算，不占广告公司合同款。',
+      oldHoardingNos: ['WJ-01', 'WJ-02', 'WJ-03', 'WJ-04', 'WJ-05', 'WJ-06', 'WJ-07', 'WJ-08'],
+      newHoardingNos: ['WJ-01', 'WJ-02', 'WJ-04', 'WJ-05', 'WJ-06', 'WJ-07', 'WJ-09'],
+      oldLength: 200, newLength: 175, newInstallDate: '2026-09-29',
+      note: '改线段需先拆除 WJ-03 已安装画面，WJ-09 段 9月29日 前完成重装。',
+      availableLength: 175,
+      affectedCreatives: [
+        { id: 'cr_0006', title: '高空作业警示画面', kind: 'safety', width: 6, reason: '超出新边界（尾部裁切）' },
+        { id: 'cr_0007', title: '安全生产月公益画面', kind: 'public', width: 6, reason: '超出新边界（尾部裁切）' },
+      ],
+      removedNos: ['WJ-03', 'WJ-08'], addedNos: ['WJ-09'],
+      cancelTaskCount: 1, reinstallTaskCount: 1, reinstallCost: 1837.5,
+      costBearer: 'construction', adCompanyDeduction: 0, separateAmount: 1837.5,
+      status: 'pending_confirm',
+      raisedBy: 'u_tm', raisedByName: '赵铁柱', createdAt: '2026-09-25 16:20',
+    },
+    {
+      id: 'relayout_000002', code: 'CP-2026-0002', submissionId: 'sub_000005',
+      reason: 'construction',
+      responsibility: '地铁13号线管线迁改，LG-06 段围挡内缩 25m，新增 LG-07 段 20m；拆装费用由施工方（宏基围挡施工队）承担，单独结算，与广告公司合同结算无关。',
+      oldHoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-06'],
+      newHoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-07'],
+      oldLength: 150, newLength: 145, newInstallDate: '2026-09-28',
+      availableLength: 145,
+      affectedCreatives: [
+        { id: 'cr_0010', title: '消防安全公益画面', kind: 'public', width: 6, reason: '超出新边界（尾部裁切）' },
+      ],
+      removedNos: ['LG-06'], addedNos: ['LG-07'],
+      cancelTaskCount: 0, reinstallTaskCount: 1, reinstallCost: 1562.5,
+      costBearer: 'construction', adCompanyDeduction: 0, separateAmount: 1562.5,
+      status: 'confirmed',
+      raisedBy: 'u_tm', raisedByName: '赵铁柱', createdAt: '2026-09-24 10:10',
+      confirmedBy: 'u_ad', confirmedByName: '李明辉', confirmedAt: '2026-09-25 11:40',
+      contractChangeId: 'change_000001',
+    },
+  ];
+
+  // ============ 合同变更记录（含责任说明） ============
+  const contractChanges: ContractChange[] = [
+    {
+      id: 'change_000001', code: 'BG-2026-0001', submissionId: 'sub_000005', relayoutId: 'relayout_000002',
+      reason: 'construction',
+      responsibility: '地铁13号线管线迁改，LG-06 段围挡内缩 25m，新增 LG-07 段 20m；拆装费用由施工方（宏基围挡施工队）承担，单独结算，与广告公司合同结算无关。',
+      oldContractLength: 150, newContractLength: 145,
+      oldContractArea: 375, newContractArea: 362.5,
+      costBearer: 'construction',
+      reinstallCost: 1562.5, adCompanyDeduction: 0, separateAmount: 1562.5,
+      separateSettlementId: 'rsettle_000001',
+      confirmedBy: 'u_ad', confirmedByName: '李明辉', time: '2026-09-25 11:40',
+    },
+  ];
+
+  // ============ 拆装费用单独结算单 ============
+  const reinstallSettlements: ReinstallSettlement[] = [
+    {
+      id: 'rsettle_000001', code: 'DC-2026-0001', submissionId: 'sub_000005',
+      relayoutId: 'relayout_000002', contractChangeId: 'change_000001',
+      bearerRole: 'construction', bearerName: '宏基围挡施工队',
+      amount: 1562.5,
+      responsibility: '地铁13号线管线迁改，LG-06 段围挡内缩 25m，新增 LG-07 段 20m；拆装费用由施工方（宏基围挡施工队）承担，单独结算，与广告公司合同结算无关。',
+      status: 'pending', createdAt: '2026-09-25 11:40',
+    },
+  ];
+
   return {
     users, submissions, tasks, tickets, acceptances, inspections,
+    relayouts, contractChanges, reinstallSettlements,
     seq: {
       code_GG: 15, code_GD: 4, code_YS: 1, code_RW: rwSeq,
+      code_CP: 2, code_BG: 1, code_DC: 1,
       id_sub: 6, id_task: rwSeq, id_ticket: 4, id_acc: 1, id_insp_rec: 4, id_rect: 2, id_insp: 4, id_cr: 12,
+      id_relayout: 2, id_change: 1, id_rsettle: 1,
     },
   };
 }

@@ -1,4 +1,4 @@
-import { Bootstrap, SafeUser } from './types';
+import { Bootstrap, RelayoutPreview, SafeUser } from './types';
 
 const TOKEN_KEY = 'hoarding_token';
 
@@ -44,6 +44,14 @@ export const api = {
   settle: (id: string) => req(`/acceptances/${id}/settle`, { method: 'POST' }),
   completeInspection: (id: string, payload: unknown) =>
     req(`/inspections/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) }),
+  previewRelayout: (payload: unknown) =>
+    req<{ preview: RelayoutPreview }>('/relayouts/preview', { method: 'POST', body: JSON.stringify(payload) }),
+  createRelayout: (payload: unknown) =>
+    req('/relayouts', { method: 'POST', body: JSON.stringify(payload) }),
+  confirmRelayout: (id: string) => req(`/relayouts/${id}/confirm`, { method: 'POST' }),
+  rejectRelayout: (id: string, note: string) =>
+    req(`/relayouts/${id}/reject`, { method: 'POST', body: JSON.stringify({ note }) }),
+  settleReinstall: (id: string) => req(`/reinstall-settlements/${id}/settle`, { method: 'POST' }),
 };
 
 export async function uploadFile(file: File): Promise<string> {

@@ -12,7 +12,7 @@ interface StatItem { title: string; value: number | string; suffix?: string; pre
 
 /** 角色工作台：巡检员看现场安装与破损整改，广告公司看可结算面积与扣款，街道看公益比例与市容风险 */
 export default function Dashboard() {
-  const { user, submissions, tasks, tickets, acceptances, inspections } = useStore();
+  const { user, submissions, tasks, tickets, acceptances, inspections, relayouts, reinstallSettlements } = useStore();
   const navigate = useNavigate();
   const [sub, setSub] = useState<Submission | null>(null);
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -28,12 +28,13 @@ export default function Dashboard() {
           { title: '未闭环工单', value: openTickets.length, suffix: '件', to: '/tickets' },
         ];
       case 'construction': {
-        const mine = tasks.filter(t => t.teamId === user.id);
+        const mine = tasks.filter(t => t.teamId === user.id && t.status !== 'cancelled');
         return [
           { title: '可领取任务', value: mine.filter(t => t.status === 'pending').length, suffix: '个', to: '/tasks' },
           { title: '安装中（已领取）', value: mine.filter(t => t.status === 'claimed').length, suffix: '个', to: '/tasks' },
           { title: '已上报待验收', value: mine.filter(t => t.status === 'reported').length, suffix: '个', to: '/tasks' },
           { title: '待我整改工单', value: openTickets.filter(t => ['wind_damage', 'dirty'].includes(t.type)).length, suffix: '件', to: '/tickets' },
+          { title: '重排单（我发起）', value: relayouts.filter(r => r.raisedBy === user.id).length, suffix: '单', to: '/relayout' },
         ];
       }
       case 'inspector':
@@ -51,16 +52,19 @@ export default function Dashboard() {
           { title: '可结算面积', value: myAccs.reduce((sum, a) => sum + a.commercialArea, 0), suffix: 'm²', to: '/settlement', precision: 1 },
           { title: '扣款合计', value: myAccs.reduce((sum, a) => sum + a.totalDeduction, 0), prefix: '¥', to: '/settlement' },
           { title: '待结算金额', value: myAccs.filter(a => a.status === 'pending_finance').reduce((sum, a) => sum + a.settleAmount, 0), prefix: '¥', to: '/settlement' },
+          { title: '待确认重排', value: relayouts.filter(r => r.status === 'pending_confirm' && myAccIds.includes(r.submissionId)).length, suffix: '单', to: '/relayout' },
         ];
       }
       case 'street': {
         const displaying = submissions.filter(s => ['installing', 'pending_acceptance', 'accepted', 'settled'].includes(s.status));
         const okRatio = displaying.filter(s => s.publicRatio >= 30 || s.type !== 'commercial').length;
+        const mySubIds = submissions.filter(s => s.submitterId === user.id).map(s => s.id);
         return [
           { title: '在展排期单', value: displaying.length, suffix: '单', to: '/street' },
           { title: '公益比例达标', value: `${okRatio}/${displaying.length}`, suffix: '', to: '/street' },
           { title: '市容风险工单', value: openTickets.length, suffix: '件', to: '/street' },
           { title: '待验收', value: submissions.filter(s => s.status === 'pending_acceptance').length, suffix: '单', to: '/acceptance' },
+          { title: '待确认重排', value: relayouts.filter(r => r.status === 'pending_confirm' && mySubIds.includes(r.submissionId)).length, suffix: '单', to: '/relayout' },
         ];
       }
       case 'merchant': {
@@ -77,11 +81,12 @@ export default function Dashboard() {
           { title: '已结算金额', value: acceptances.filter(a => a.status === 'settled').reduce((sum, a) => sum + a.settleAmount, 0), prefix: '¥', to: '/settlement' },
           { title: '扣款合计', value: acceptances.reduce((sum, a) => sum + a.totalDeduction, 0), prefix: '¥', to: '/settlement' },
           { title: '待核定扣款工单', value: tickets.filter(t => t.status !== 'closed' && t.deductionAmount === 0).length, suffix: '件', to: '/tickets' },
+          { title: '拆装单独结算待办', value: reinstallSettlements.filter(r => r.status === 'pending').length, suffix: '单', to: '/settlement' },
         ];
       default:
         return [];
     }
-  }, [user, submissions, tasks, tickets, acceptances, inspections]);
+  }, [user, submissions, tasks, tickets, acceptances, inspections, relayouts, reinstallSettlements]);
 
   if (!user) return null;
   const recentTickets = tickets.filter(t => t.status !== 'closed').slice(0, 6);

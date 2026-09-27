@@ -16,6 +16,7 @@ export function getDb(): DB {
   if (fs.existsSync(DB_FILE)) {
     try {
       db = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')) as DB;
+      migrate(db);
       return db;
     } catch (e) {
       console.error('db.json 解析失败，使用种子数据重建', e);
@@ -32,6 +33,16 @@ export function save(): void {
   const tmp = DB_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, DB_FILE);
+}
+
+/** 旧版本数据兼容：补齐围挡重排相关集合与任务字段 */
+function migrate(d: DB): void {
+  d.relayouts = d.relayouts || [];
+  d.contractChanges = d.contractChanges || [];
+  d.reinstallSettlements = d.reinstallSettlements || [];
+  for (const t of d.tasks || []) {
+    if (!t.kind) t.kind = 'install';
+  }
 }
 
 /** 业务单号生成：GG-2026-0001 */
