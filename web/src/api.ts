@@ -44,6 +44,12 @@ export const api = {
   settle: (id: string) => req(`/acceptances/${id}/settle`, { method: 'POST' }),
   completeInspection: (id: string, payload: unknown) =>
     req(`/inspections/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) }),
+  createReplan: (submissionId: string, payload: unknown) =>
+    req(`/submissions/${submissionId}/replans`, { method: 'POST', body: JSON.stringify(payload) }),
+  confirmReplan: (id: string) => req(`/replans/${id}/confirm`, { method: 'POST' }),
+  rejectReplan: (id: string, note: string) =>
+    req(`/replans/${id}/reject`, { method: 'POST', body: JSON.stringify({ note }) }),
+  settleReplanCost: (id: string) => req(`/replans/${id}/settle-cost`, { method: 'POST' }),
 };
 
 export async function uploadFile(file: File): Promise<string> {

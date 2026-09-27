@@ -5,8 +5,9 @@ import fs from 'fs';
 import multer from 'multer';
 import { getDb, save, nextCode, uid, UPLOAD_DIR } from './store';
 import {
-  Acceptance, Creative, Inspection, Role, SafeUser, Submission, Ticket, TicketType, User,
+  Acceptance, Creative, Inspection, Replan, ReplanReason, Role, SafeUser, Submission, Ticket, TicketType, User,
 } from './types';
+import { computeReplanPreview, REASON_RESPONSIBILITY, REINSTALL_UNIT_PRICE, RESPONSIBILITY_LABEL } from './replan';
 
 const PORT = Number(process.env.PORT || 3000);
 const SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
@@ -105,6 +106,7 @@ app.get('/api/bootstrap', auth, (_req, res) => {
     tickets: db.tickets,
     acceptances: db.acceptances,
     inspections: db.inspections,
+    replans: db.replans,
   });
 });
 
@@ -171,7 +173,7 @@ app.post('/api/submissions', auth, requireRole('ad_company', 'street'), (req, re
     merchantId: b.merchantId ? String(b.merchantId) : undefined,
     contractLength: Number(b.contractLength ?? b.hoardingLength),
     unitPrice: Number(b.unitPrice ?? 0),
-    status: 'pending_review', createdAt: now(), history: [],
+    status: 'pending_review', createdAt: now(), history: [], contractChanges: [],
   };
   pushHistory(s, req.user!, '提交画面审核', `类型：${s.type}，公益比例 ${s.publicRatio}%`);
   db.submissions.unshift(s);
@@ -202,6 +204,7 @@ app.post('/api/submissions/:id/review', auth, requireRole('reviewer'), (req, res
       db.tasks.push({
         id: uid('task'), code: nextCode('RW'), submissionId: s.id,
         roadSegment: s.roadSegment, hoardingNo: no, teamId: s.constructionTeamId, status: 'pending',
+        kind: 'install',
       });
     }
     pushHistory(s, req.user!, '审核通过', `已生成 ${s.hoardingNos.length} 个安装任务`);
@@ -250,16 +253,201 @@ app.post('/api/tasks/:id/report', auth, requireRole('construction'), (req, res) 
   t.status = 'reported';
   const s = db.submissions.find(x => x.id === t.submissionId);
   if (s) {
-    pushHistory(s, req.user!, '上报安装情况', `${t.hoardingNo} 实际 ${t.report.actualLength} 米`);
-    const all = db.tasks.filter(x => x.submissionId === s.id);
-    if (all.every(x => x.status === 'reported')) {
+    pushHistory(s, req.user!, t.kind === 'reinstall' ? '上报拆装情况' : '上报安装情况', `${t.hoardingNo} 实际 ${t.report.actualLength} 米`);
+    // 已取消的任务不参与完工判定；仅安装阶段自动流转待验收（验收后排期不因拆装任务回退）
+    const active = db.tasks.filter(x => x.submissionId === s.id && x.status !== 'cancelled');
+    if (['approved', 'installing'].includes(s.status) && active.length && active.every(x => x.status === 'reported')) {
       s.status = 'pending_acceptance';
-      const total = all.reduce((sum, x) => sum + (x.report?.actualLength || 0), 0);
+      const total = active.reduce((sum, x) => sum + (x.report?.actualLength || 0), 0);
       pushHistory(s, req.user!, '全部安装上报完成', `实际安装合计 ${total} 米`);
     }
   }
   save();
   res.json({ task: t });
+});
+
+// ---------------- 工地改围挡重排 ----------------
+const REPLAN_REASONS: ReplanReason[] = ['construction_adjust', 'ad_company_request', 'merchant_request', 'force_majeure'];
+const REPLAN_ALLOWED_STATUS = ['approved', 'installing', 'pending_acceptance', 'accepted'];
+
+// 施工队发起重排：重算可用广告长度、受影响画面与安装时间，待广告公司确认
+app.post('/api/submissions/:id/replans', auth, requireRole('construction'), (req, res) => {
+  const db = getDb();
+  const s = db.submissions.find(x => x.id === req.params.id);
+  if (!s) { res.status(404).json({ error: '排期单不存在' }); return; }
+  if (s.constructionTeamId !== req.user!.id) { res.status(403).json({ error: '仅该工地的责任施工队可发起围挡重排' }); return; }
+  if (!REPLAN_ALLOWED_STATUS.includes(s.status)) { res.status(400).json({ error: '当前状态不支持围挡重排（待审核/已驳回/已结算不可重排）' }); return; }
+  if (db.replans.some(r => r.submissionId === s.id && r.status === 'pending_confirm')) {
+    res.status(400).json({ error: '该排期单已有待确认的重排单，请先处理' }); return;
+  }
+  const b = req.body || {};
+  const newLength = Number(b.newLength);
+  if (!(newLength > 0)) { res.status(400).json({ error: '请填写调整后的围挡边界长度' }); return; }
+  if (!REPLAN_REASONS.includes(b.reason)) { res.status(400).json({ error: '变更原因不合法' }); return; }
+  const statement = String(b.responsibilityStatement || '').trim();
+  if (statement.length < 5) { res.status(400).json({ error: '请填写责任说明（不少于 5 个字），将进入合同变更记录' }); return; }
+  const newNos: string[] | undefined = Array.isArray(b.newHoardingNos)
+    ? b.newHoardingNos.map((x: string) => String(x).trim()).filter(Boolean)
+    : undefined;
+  if (newNos && !newNos.length) { res.status(400).json({ error: '调整后至少保留一个围挡编号' }); return; }
+  const preview = computeReplanPreview(s, db.tasks.filter(t => t.submissionId === s.id), newLength, newNos, today());
+  if (Math.abs(newLength - s.hoardingLength) < 1e-9 && preview.newHoardingNos.join() === s.hoardingNos.join()) {
+    res.status(400).json({ error: '围挡边界未发生变化，无需重排' }); return;
+  }
+  const replan: Replan = {
+    id: uid('replan'), code: nextCode('CP'), submissionId: s.id,
+    reason: b.reason, responsibility: REASON_RESPONSIBILITY[b.reason as ReplanReason],
+    responsibilityStatement: statement,
+    oldLength: s.hoardingLength, newLength,
+    oldHoardingNos: [...s.hoardingNos], newHoardingNos: preview.newHoardingNos,
+    availableLength: preview.availableLength,
+    affectedCreatives: preview.affectedCreatives,
+    affectedPanels: preview.affectedPanels,
+    affectedHoardingNos: preview.affectedHoardingNos,
+    affectedInstalledLength: preview.affectedInstalledLength,
+    estimatedDays: preview.estimatedDays,
+    estimatedInstallDate: preview.estimatedInstallDate,
+    reinstallCost: preview.reinstallCost,
+    status: 'pending_confirm',
+    raisedBy: req.user!.id, raisedByName: req.user!.name, createdAt: now(),
+    reinstallTaskIds: [], cancelledTaskIds: [], newTaskIds: [],
+  };
+  db.replans.unshift(replan);
+  pushHistory(s, req.user!, '发起围挡重排', `${replan.code}：围挡边界 ${replan.oldLength}m → ${replan.newLength}m，待广告公司确认`);
+  save();
+  res.json({ replan });
+});
+
+// 广告公司确认重排：合同面积、安装任务、验收清单同步更新；已安装受影响画面生成拆装任务
+app.post('/api/replans/:id/confirm', auth, requireRole('ad_company'), (req, res) => {
+  const db = getDb();
+  const r = db.replans.find(x => x.id === req.params.id);
+  if (!r) { res.status(404).json({ error: '重排单不存在' }); return; }
+  const s = db.submissions.find(x => x.id === r.submissionId);
+  if (!s) { res.status(404).json({ error: '关联排期单不存在' }); return; }
+  if (s.submitterId !== req.user!.id) { res.status(403).json({ error: '仅该排期单的提交广告公司可确认重排' }); return; }
+  if (r.status !== 'pending_confirm') { res.status(400).json({ error: '该重排单已处理' }); return; }
+
+  // 1) 合同面积同步：合同长度/围挡边界更新（合同面积 = 合同长度 × 围挡高度）
+  const oldContractLength = s.contractLength;
+  const oldContractArea = Math.round(oldContractLength * s.height * 100) / 100;
+  s.hoardingLength = r.newLength;
+  s.hoardingNos = [...r.newHoardingNos];
+  s.contractLength = r.newLength;
+  const newContractArea = Math.round(r.newLength * s.height * 100) / 100;
+
+  // 2) 安装任务同步：移除编号的未完成任务取消；新增编号生成安装任务；已安装受影响画面生成拆装任务
+  const myTasks = db.tasks.filter(t => t.submissionId === s.id);
+  for (const t of myTasks) {
+    if (!r.newHoardingNos.includes(t.hoardingNo) && (t.status === 'pending' || t.status === 'claimed')) {
+      t.status = 'cancelled';
+      r.cancelledTaskIds.push(t.id);
+    }
+  }
+  const oldNos = new Set(r.oldHoardingNos);
+  for (const no of r.newHoardingNos) {
+    if (!oldNos.has(no)) {
+      const t = {
+        id: uid('task'), code: nextCode('RW'), submissionId: s.id,
+        roadSegment: s.roadSegment, hoardingNo: no, teamId: s.constructionTeamId,
+        status: 'pending' as const, kind: 'install' as const,
+      };
+      db.tasks.push(t);
+      r.newTaskIds.push(t.id);
+    }
+  }
+  const affectedNames = r.affectedCreatives.map(c => c.title).join('、');
+  for (const t of myTasks) {
+    if (t.status === 'reported' && r.affectedHoardingNos.includes(t.hoardingNo)) {
+      const cost = Math.round((t.report?.actualLength || 0) * s.height * REINSTALL_UNIT_PRICE * 100) / 100;
+      const rt = {
+        id: uid('task'), code: nextCode('RW'), submissionId: s.id,
+        roadSegment: s.roadSegment, hoardingNo: t.hoardingNo, teamId: s.constructionTeamId,
+        status: 'pending' as const, kind: 'reinstall' as const, replanId: r.id,
+        affectedCreatives: affectedNames, cost, costBearer: r.responsibility,
+      };
+      db.tasks.push(rt);
+      r.reinstallTaskIds.push(rt.id);
+    }
+  }
+
+  // 3) 验收清单同步：已生成验收单的按新合同长度重算可结算面积，并追加复核整改项
+  const acc = db.acceptances.find(a => a.submissionId === s.id && a.status === 'pending_finance');
+  if (acc) {
+    acc.contractLength = r.newLength;
+    acc.acceptedLength = Math.min(acc.acceptedLength, r.newLength);
+    acc.settleableArea = Math.round(acc.acceptedLength * s.height * 100) / 100;
+    acc.publicArea = Math.round(acc.settleableArea * s.publicRatio / 100 * 100) / 100;
+    acc.commercialArea = Math.round((acc.settleableArea - acc.publicArea) * 100) / 100;
+    acc.grossAmount = Math.round(acc.commercialArea * acc.unitPrice * 100) / 100;
+    acc.settleAmount = Math.round((acc.grossAmount - acc.totalDeduction) * 100) / 100;
+    acc.rectifications.push({
+      id: uid('rect'),
+      desc: `重排单 ${r.code}：按新边界复核画面安装与验收长度${r.affectedHoardingNos.length ? `（${r.affectedHoardingNos.join('、')}）` : ''}`,
+      assigneeRole: 'construction', deadline: r.estimatedInstallDate, status: 'open',
+    });
+    acc.comment = `${acc.comment || ''}${acc.comment ? '；' : ''}${today()} 围挡重排 ${r.code} 确认，合同长度 ${oldContractLength}m→${r.newLength}m，验收清单已同步更新`;
+  }
+
+  // 4) 责任说明进入合同变更记录
+  s.contractChanges.push({
+    id: uid('change'), time: now(), replanId: r.id, replanCode: r.code,
+    reason: r.reason, responsibility: r.responsibility, statement: r.responsibilityStatement,
+    oldContractLength, newContractLength: r.newLength,
+    oldContractArea, newContractArea,
+    reinstallCost: r.reinstallCost,
+    by: req.user!.id, byName: req.user!.name,
+  });
+
+  // 5) 拆装费用单独结算：不并入广告合同扣款，由财务按责任方单独结算
+  if (r.reinstallCost > 0) {
+    r.costSettlement = { amount: r.reinstallCost, bearer: r.responsibility, status: 'pending' };
+  }
+
+  r.status = 'confirmed';
+  r.confirmedAt = now();
+  r.confirmedBy = req.user!.id;
+  r.confirmedByName = req.user!.name;
+  pushHistory(s, req.user!, '确认围挡重排',
+    `合同长度 ${oldContractLength}m→${r.newLength}m，取消任务 ${r.cancelledTaskIds.length} 个，新增任务 ${r.newTaskIds.length} 个，拆装任务 ${r.reinstallTaskIds.length} 个` +
+    (r.reinstallCost > 0 ? `，拆装费 ¥${r.reinstallCost} 由${RESPONSIBILITY_LABEL[r.responsibility]}承担并单独结算` : ''));
+  save();
+  res.json({ replan: r, submission: s });
+});
+
+// 广告公司驳回重排
+app.post('/api/replans/:id/reject', auth, requireRole('ad_company'), (req, res) => {
+  const db = getDb();
+  const r = db.replans.find(x => x.id === req.params.id);
+  if (!r) { res.status(404).json({ error: '重排单不存在' }); return; }
+  const s = db.submissions.find(x => x.id === r.submissionId);
+  if (!s) { res.status(404).json({ error: '关联排期单不存在' }); return; }
+  if (s.submitterId !== req.user!.id) { res.status(403).json({ error: '仅该排期单的提交广告公司可驳回重排' }); return; }
+  if (r.status !== 'pending_confirm') { res.status(400).json({ error: '该重排单已处理' }); return; }
+  const note = String(req.body?.note || '').trim();
+  if (!note) { res.status(400).json({ error: '驳回必须填写说明' }); return; }
+  r.status = 'rejected';
+  r.rejectNote = note;
+  pushHistory(s, req.user!, '驳回围挡重排', `${r.code}：${note}`);
+  save();
+  res.json({ replan: r });
+});
+
+// 财务单独结算拆装费用（施工方原因造成的拆装费单独结算，不并入广告合同扣款）
+app.post('/api/replans/:id/settle-cost', auth, requireRole('finance'), (req, res) => {
+  const db = getDb();
+  const r = db.replans.find(x => x.id === req.params.id);
+  if (!r) { res.status(404).json({ error: '重排单不存在' }); return; }
+  if (r.status !== 'confirmed') { res.status(400).json({ error: '重排单未确认，无法结算拆装费用' }); return; }
+  if (!r.costSettlement) { res.status(400).json({ error: '该重排无拆装费用' }); return; }
+  if (r.costSettlement.status !== 'pending') { res.status(400).json({ error: '拆装费用已结算' }); return; }
+  r.costSettlement.status = 'settled';
+  r.costSettlement.settledAt = now();
+  r.costSettlement.settledBy = req.user!.name;
+  const s = db.submissions.find(x => x.id === r.submissionId);
+  if (s) pushHistory(s, req.user!, '拆装费用单独结算', `${r.code} 拆装费 ¥${r.costSettlement.amount}（责任方：${RESPONSIBILITY_LABEL[r.costSettlement.bearer]}）`);
+  save();
+  res.json({ replan: r });
 });
 
 // ---------------- 验收（审核人员 / 街道） ----------------

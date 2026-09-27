@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, getToken, setToken } from './api';
-import { Acceptance, Bootstrap, Inspection, InstallTask, SafeUser, Submission, Ticket } from './types';
+import { Acceptance, Bootstrap, Inspection, InstallTask, Replan, SafeUser, Submission, Ticket } from './types';
 
 const USER_KEY = 'hoarding_user';
 
@@ -12,6 +12,7 @@ interface AppState {
   tickets: Ticket[];
   acceptances: Acceptance[];
   inspections: Inspection[];
+  replans: Replan[];
   users: SafeUser[];
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
@@ -28,7 +29,7 @@ export const useStore = create<AppState>((set, get) => ({
     } catch { return null; }
   })(),
   ready: false,
-  submissions: [], tasks: [], tickets: [], acceptances: [], inspections: [], users: [],
+  submissions: [], tasks: [], tickets: [], acceptances: [], inspections: [], replans: [], users: [],
 
   login: async (username, password) => {
     const { token, user } = await api.login(username, password);
@@ -43,7 +44,7 @@ export const useStore = create<AppState>((set, get) => ({
     localStorage.removeItem(USER_KEY);
     set({
       user: null, ready: false,
-      submissions: [], tasks: [], tickets: [], acceptances: [], inspections: [], users: [],
+      submissions: [], tasks: [], tickets: [], acceptances: [], inspections: [], replans: [], users: [],
     });
   },
 
@@ -53,6 +54,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({
       users: data.users, submissions: data.submissions, tasks: data.tasks,
       tickets: data.tickets, acceptances: data.acceptances, inspections: data.inspections,
+      replans: data.replans || [],
       ready: true,
     });
   },

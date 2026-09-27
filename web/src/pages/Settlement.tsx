@@ -2,20 +2,24 @@ import { useState } from 'react';
 import { Button, Card, Col, Descriptions, Drawer, Modal, Row, Space, Statistic, Table, Tag, Typography, message } from 'antd';
 import { useStore } from '../store';
 import { api } from '../api';
-import { Acceptance } from '../types';
-import { ROLE_LABEL } from '../dict';
+import { Acceptance, Replan } from '../types';
+import { REPLAN_REASON_LABEL, RESPONSIBILITY_COLOR, RESPONSIBILITY_LABEL, ROLE_LABEL } from '../dict';
 
 /** 结算中心：财务确认结算；广告公司查看可结算面积与扣款明细 */
 export default function SettlementPage() {
-  const { user, acceptances, submissions, act } = useStore();
+  const { user, acceptances, submissions, replans, act } = useStore();
   const [detail, setDetail] = useState<Acceptance | null>(null);
   const [busy, setBusy] = useState(false);
 
   const isFinance = user?.role === 'finance';
   const mySubs = submissions.filter(s => s.submitterId === user?.id).map(s => s.id);
   const visible = isFinance ? acceptances : acceptances.filter(a => mySubs.includes(a.submissionId));
+  // 拆装费用单独结算：财务看全部，广告公司看自家排期（含责任说明）
+  const costReplans = (isFinance ? replans : replans.filter(r => mySubs.includes(r.submissionId)))
+    .filter(r => r.status === 'confirmed' && r.costSettlement);
 
   const subOf = (a: Acceptance) => submissions.find(s => s.id === a.submissionId);
+  const subOfReplan = (r: Replan) => submissions.find(s => s.id === r.submissionId);
 
   const settle = (a: Acceptance) => {
     Modal.confirm({
@@ -26,6 +30,25 @@ export default function SettlementPage() {
         try {
           await act(() => api.settle(a.id));
           message.success('结算完成，排期单已归档为「已结算」');
+        } catch (e: any) {
+          message.error(e.message);
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
+  };
+
+  const settleCost = (r: Replan) => {
+    Modal.confirm({
+      title: '单独结算拆装费用？',
+      content: `${r.code} 拆装费 ¥${r.costSettlement?.amount}，责任方：${RESPONSIBILITY_LABEL[r.costSettlement?.bearer || 'construction']}。该费用单独结算，不并入广告合同扣款。`,
+      okText: '确认结算',
+      onOk: async () => {
+        setBusy(true);
+        try {
+          await act(() => api.settleReplanCost(r.id));
+          message.success('拆装费用已单独结算');
         } catch (e: any) {
           message.error(e.message);
         } finally {
@@ -66,6 +89,45 @@ export default function SettlementPage() {
                   )}
                 </Space>
               ),
+            },
+          ]}
+        />
+      </Card>
+
+      <Card
+        size="small" style={{ marginTop: 16 }}
+        title={`围挡重排拆装费用（单独结算，不并入广告合同扣款）${costReplans.length ? `（${costReplans.length}）` : ''}`}
+      >
+        <Table
+          rowKey="id" size="small" dataSource={costReplans}
+          locale={{ emptyText: '暂无重排拆装费用' }}
+          columns={[
+            { title: '重排单号', dataIndex: 'code', width: 115 },
+            {
+              title: '关联排期', ellipsis: true,
+              render: (_, r: Replan) => { const s = subOfReplan(r); return s ? `${s.code} ${s.title}` : r.submissionId; },
+            },
+            { title: '变更原因', dataIndex: 'reason', width: 130, render: v => REPLAN_REASON_LABEL[v as keyof typeof REPLAN_REASON_LABEL] },
+            {
+              title: '责任方', width: 100,
+              render: (_, r) => <Tag color={RESPONSIBILITY_COLOR[r.costSettlement!.bearer]}>{RESPONSIBILITY_LABEL[r.costSettlement!.bearer]}</Tag>,
+            },
+            { title: '责任说明', dataIndex: 'responsibilityStatement', ellipsis: true },
+            {
+              title: '拆装费用', width: 110,
+              render: (_, r) => <b style={{ color: '#cf1322' }}>¥{r.costSettlement!.amount}</b>,
+            },
+            {
+              title: '结算状态', width: 150,
+              render: (_, r) => r.costSettlement!.status === 'settled'
+                ? <Tag color="success">已结算（{r.costSettlement!.settledBy}）</Tag>
+                : <Tag color="gold">待单独结算</Tag>,
+            },
+            {
+              title: '操作', width: 110,
+              render: (_, r) => isFinance && r.costSettlement!.status === 'pending'
+                ? <Button size="small" type="primary" loading={busy} onClick={() => settleCost(r)}>单独结算</Button>
+                : null,
             },
           ]}
         />

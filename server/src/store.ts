@@ -16,15 +16,28 @@ export function getDb(): DB {
   if (fs.existsSync(DB_FILE)) {
     try {
       db = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8')) as DB;
+      migrate(db);
       return db;
     } catch (e) {
       console.error('db.json 解析失败，使用种子数据重建', e);
     }
   }
   db = buildSeed();
+  migrate(db);
   save();
   console.log('[store] 已写入种子数据 ->', DB_FILE);
   return db;
+}
+
+/** 旧版本数据兼容：补齐围挡重排相关字段 */
+function migrate(d: DB): void {
+  d.replans = d.replans || [];
+  for (const s of d.submissions) s.contractChanges = s.contractChanges || [];
+  for (const t of d.tasks) t.kind = t.kind || 'install';
+  d.seq = d.seq || {};
+  d.seq.code_CP = d.seq.code_CP || 0;
+  d.seq.id_replan = d.seq.id_replan || 0;
+  d.seq.id_change = d.seq.id_change || 0;
 }
 
 export function save(): void {

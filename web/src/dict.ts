@@ -1,4 +1,4 @@
-import { Role, SubmissionStatus, SubmissionType, TicketStatus, TicketType, TaskStatus, CreativeKind } from './types';
+import { Role, SubmissionStatus, SubmissionType, TicketStatus, TicketType, TaskStatus, CreativeKind, ReplanReason, ReplanResponsibility, ReplanStatus, TaskKind } from './types';
 
 export const ROLE_LABEL: Record<Role, string> = {
   ad_company: '广告公司', street: '街道', reviewer: '审核人员',
@@ -25,11 +25,52 @@ export const STATUS_COLOR: Record<SubmissionStatus, string> = {
 };
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
-  pending: '待领取', claimed: '已领取', reported: '已上报',
+  pending: '待领取', claimed: '已领取', reported: '已上报', cancelled: '已取消',
 };
 
 export const TASK_STATUS_COLOR: Record<TaskStatus, string> = {
-  pending: 'default', claimed: 'processing', reported: 'success',
+  pending: 'default', claimed: 'processing', reported: 'success', cancelled: 'default',
+};
+
+export const TASK_KIND_LABEL: Record<TaskKind, string> = {
+  install: '安装', reinstall: '拆装',
+};
+
+export const TASK_KIND_COLOR: Record<TaskKind, string> = {
+  install: 'blue', reinstall: 'orange',
+};
+
+// ============ 工地改围挡重排 ============
+
+export const REPLAN_REASON_LABEL: Record<ReplanReason, string> = {
+  construction_adjust: '施工方临时调整',
+  ad_company_request: '广告公司要求调整',
+  merchant_request: '商户需求变更',
+  force_majeure: '不可抗力/市政要求',
+};
+
+export const RESPONSIBILITY_LABEL: Record<ReplanResponsibility, string> = {
+  construction: '施工方', ad_company: '广告公司', merchant: '商户', shared: '双方分担',
+};
+
+export const RESPONSIBILITY_COLOR: Record<ReplanResponsibility, string> = {
+  construction: 'volcano', ad_company: 'gold', merchant: 'purple', shared: 'geekblue',
+};
+
+export const REPLAN_STATUS_LABEL: Record<ReplanStatus, string> = {
+  pending_confirm: '待广告公司确认', confirmed: '已确认', rejected: '已驳回',
+};
+
+export const REPLAN_STATUS_COLOR: Record<ReplanStatus, string> = {
+  pending_confirm: 'warning', confirmed: 'success', rejected: 'error',
+};
+
+/** 变更原因 → 拆装费用责任方（与后端一致：费用由施工变更原因决定） */
+export const REASON_RESPONSIBILITY: Record<ReplanReason, ReplanResponsibility> = {
+  construction_adjust: 'construction',
+  ad_company_request: 'ad_company',
+  merchant_request: 'merchant',
+  force_majeure: 'shared',
 };
 
 export const TICKET_TYPE_LABEL: Record<TicketType, string> = {

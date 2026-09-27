@@ -12,7 +12,7 @@ interface StatItem { title: string; value: number | string; suffix?: string; pre
 
 /** 角色工作台：巡检员看现场安装与破损整改，广告公司看可结算面积与扣款，街道看公益比例与市容风险 */
 export default function Dashboard() {
-  const { user, submissions, tasks, tickets, acceptances, inspections } = useStore();
+  const { user, submissions, tasks, tickets, acceptances, inspections, replans } = useStore();
   const navigate = useNavigate();
   const [sub, setSub] = useState<Submission | null>(null);
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -34,6 +34,7 @@ export default function Dashboard() {
           { title: '安装中（已领取）', value: mine.filter(t => t.status === 'claimed').length, suffix: '个', to: '/tasks' },
           { title: '已上报待验收', value: mine.filter(t => t.status === 'reported').length, suffix: '个', to: '/tasks' },
           { title: '待我整改工单', value: openTickets.filter(t => ['wind_damage', 'dirty'].includes(t.type)).length, suffix: '件', to: '/tickets' },
+          { title: '我发起的重排', value: replans.filter(r => r.raisedBy === user.id).length, suffix: '单', to: '/replans' },
         ];
       }
       case 'inspector':
@@ -51,6 +52,7 @@ export default function Dashboard() {
           { title: '可结算面积', value: myAccs.reduce((sum, a) => sum + a.commercialArea, 0), suffix: 'm²', to: '/settlement', precision: 1 },
           { title: '扣款合计', value: myAccs.reduce((sum, a) => sum + a.totalDeduction, 0), prefix: '¥', to: '/settlement' },
           { title: '待结算金额', value: myAccs.filter(a => a.status === 'pending_finance').reduce((sum, a) => sum + a.settleAmount, 0), prefix: '¥', to: '/settlement' },
+          { title: '待确认重排', value: replans.filter(r => r.status === 'pending_confirm' && myAccIds.includes(r.submissionId)).length, suffix: '单', to: '/replans' },
         ];
       }
       case 'street': {
@@ -77,11 +79,12 @@ export default function Dashboard() {
           { title: '已结算金额', value: acceptances.filter(a => a.status === 'settled').reduce((sum, a) => sum + a.settleAmount, 0), prefix: '¥', to: '/settlement' },
           { title: '扣款合计', value: acceptances.reduce((sum, a) => sum + a.totalDeduction, 0), prefix: '¥', to: '/settlement' },
           { title: '待核定扣款工单', value: tickets.filter(t => t.status !== 'closed' && t.deductionAmount === 0).length, suffix: '件', to: '/tickets' },
+          { title: '待结算拆装费', value: replans.filter(r => r.costSettlement?.status === 'pending').length, suffix: '笔', to: '/settlement' },
         ];
       default:
         return [];
     }
-  }, [user, submissions, tasks, tickets, acceptances, inspections]);
+  }, [user, submissions, tasks, tickets, acceptances, inspections, replans]);
 
   if (!user) return null;
   const recentTickets = tickets.filter(t => t.status !== 'closed').slice(0, 6);

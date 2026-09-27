@@ -44,9 +44,11 @@ export interface Submission {
   constructionTeamId: string; acceptanceRequirements: string;
   merchantId?: string; contractLength: number; unitPrice: number;
   status: SubmissionStatus; review?: Review; createdAt: string; history: HistoryItem[];
+  contractChanges: ContractChange[];
 }
 
-export type TaskStatus = 'pending' | 'claimed' | 'reported';
+export type TaskStatus = 'pending' | 'claimed' | 'reported' | 'cancelled';
+export type TaskKind = 'install' | 'reinstall';
 
 export interface InstallReport {
   beforePhotos: string[]; afterPhotos: string[]; actualLength: number; gaps: string;
@@ -56,7 +58,51 @@ export interface InstallReport {
 
 export interface InstallTask {
   id: string; code: string; submissionId: string; roadSegment: string; hoardingNo: string;
-  teamId: string; status: TaskStatus; claimedAt?: string; report?: InstallReport;
+  teamId: string; status: TaskStatus; kind: TaskKind;
+  replanId?: string; affectedCreatives?: string; cost?: number; costBearer?: ReplanResponsibility;
+  claimedAt?: string; report?: InstallReport;
+}
+
+// ============ 工地改围挡重排 ============
+
+export type ReplanReason = 'construction_adjust' | 'ad_company_request' | 'merchant_request' | 'force_majeure';
+export type ReplanResponsibility = 'construction' | 'ad_company' | 'merchant' | 'shared';
+export type ReplanStatus = 'pending_confirm' | 'confirmed' | 'rejected';
+
+export interface ReplanPanel { creativeId: string; title: string; kind: CreativeKind; start: number; end: number }
+export interface AffectedCreative { id: string; title: string; kind: CreativeKind }
+
+export interface ReplanCostSettlement {
+  amount: number; bearer: ReplanResponsibility;
+  status: 'pending' | 'settled'; settledAt?: string; settledBy?: string;
+}
+
+export interface Replan {
+  id: string; code: string; submissionId: string;
+  reason: ReplanReason; responsibility: ReplanResponsibility; responsibilityStatement: string;
+  oldLength: number; newLength: number;
+  oldHoardingNos: string[]; newHoardingNos: string[];
+  availableLength: number;
+  affectedCreatives: AffectedCreative[];
+  affectedPanels: ReplanPanel[];
+  affectedHoardingNos: string[];
+  affectedInstalledLength: number;
+  estimatedDays: number; estimatedInstallDate: string;
+  reinstallCost: number;
+  status: ReplanStatus;
+  raisedBy: string; raisedByName: string; createdAt: string;
+  confirmedAt?: string; confirmedBy?: string; confirmedByName?: string;
+  rejectNote?: string;
+  reinstallTaskIds: string[]; cancelledTaskIds: string[]; newTaskIds: string[];
+  costSettlement?: ReplanCostSettlement;
+}
+
+export interface ContractChange {
+  id: string; time: string; replanId: string; replanCode: string;
+  reason: ReplanReason; responsibility: ReplanResponsibility; statement: string;
+  oldContractLength: number; newContractLength: number;
+  oldContractArea: number; newContractArea: number;
+  reinstallCost: number; by: string; byName: string;
 }
 
 export type TicketType = 'temporary_change' | 'wind_damage' | 'ratio_violation' | 'early_removal' | 'dirty' | 'length_mismatch';
@@ -100,4 +146,5 @@ export interface Inspection {
 export interface Bootstrap {
   users: SafeUser[]; submissions: Submission[]; tasks: InstallTask[];
   tickets: Ticket[]; acceptances: Acceptance[]; inspections: Inspection[];
+  replans: Replan[];
 }

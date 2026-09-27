@@ -5,6 +5,7 @@ import {
 import { useStore } from '../store';
 import { api } from '../api';
 import { InstallTask } from '../types';
+import { RESPONSIBILITY_LABEL } from '../dict';
 import { TaskStatusTag } from '../components/Tags';
 import PhotoUpload from '../components/PhotoUpload';
 
@@ -45,10 +46,20 @@ export default function TasksPage() {
 
   const baseColumns = [
     { title: '任务号', dataIndex: 'code', width: 110 },
+    {
+      title: '类型', dataIndex: 'kind', width: 70,
+      render: (v: string) => v === 'reinstall' ? <Tag color="orange">拆装</Tag> : <Tag>安装</Tag>,
+    },
     { title: '排期单', render: (_: unknown, t: InstallTask) => { const s = subOf(t); return s ? `${s.code} ${s.title}` : t.submissionId; }, ellipsis: true },
     { title: '路段', dataIndex: 'roadSegment', width: 120 },
     { title: '围挡编号', dataIndex: 'hoardingNo', width: 90 },
     { title: '状态', dataIndex: 'status', width: 80, render: (v: any) => <TaskStatusTag s={v} /> },
+    {
+      title: '拆装信息', width: 200,
+      render: (_: unknown, t: InstallTask) => t.kind === 'reinstall'
+        ? <span style={{ fontSize: 12 }}>费用 ¥{t.cost}（{RESPONSIBILITY_LABEL[t.costBearer || 'construction']}承担）<br />{t.affectedCreatives}</span>
+        : '—',
+    },
   ];
 
   const pendingCols = [...baseColumns, {
@@ -80,19 +91,20 @@ export default function TasksPage() {
     <div>
       <Typography.Title level={4}>安装任务（按路段与围挡编号领取）</Typography.Title>
       <Alert type="info" showIcon style={{ marginBottom: 16 }}
-        message="领取后请按计划安装；上报需包含安装前/后照片、实际长度、缺口情况、是否遮挡交通标识、是否影响行人通行。" />
+        message="领取后请按计划安装；上报需包含安装前/后照片、实际长度、缺口情况、是否遮挡交通标识、是否影响行人通行。「拆装」任务来自围挡重排，费用按变更原因由责任方承担。" />
       <Card size="small">
         <Tabs
           items={[
             { key: 'pending', label: `可领取（${mine.filter(t => t.status === 'pending').length}）`, children: <Table rowKey="id" size="small" dataSource={mine.filter(t => t.status === 'pending')} columns={pendingCols as any} /> },
             { key: 'claimed', label: `已领取待上报（${mine.filter(t => t.status === 'claimed').length}）`, children: <Table rowKey="id" size="small" dataSource={mine.filter(t => t.status === 'claimed')} columns={claimedCols as any} /> },
             { key: 'reported', label: `已上报（${mine.filter(t => t.status === 'reported').length}）`, children: <Table rowKey="id" size="small" dataSource={mine.filter(t => t.status === 'reported')} columns={reportedCols as any} /> },
+            { key: 'cancelled', label: `已取消（${mine.filter(t => t.status === 'cancelled').length}）`, children: <Table rowKey="id" size="small" dataSource={mine.filter(t => t.status === 'cancelled')} columns={baseColumns as any} /> },
           ]}
         />
       </Card>
 
       <Modal
-        title={reportTask ? `上报安装情况：${reportTask.roadSegment} ${reportTask.hoardingNo}` : ''}
+        title={reportTask ? `上报${reportTask.kind === 'reinstall' ? '拆装' : '安装'}情况：${reportTask.roadSegment} ${reportTask.hoardingNo}` : ''}
         open={!!reportTask} onCancel={() => setReportTask(null)} onOk={submitReport}
         confirmLoading={busy} width={640} okText="提交上报"
       >

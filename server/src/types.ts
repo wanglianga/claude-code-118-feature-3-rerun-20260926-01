@@ -109,9 +109,13 @@ export interface Submission {
   review?: Review;
   createdAt: string;
   history: HistoryItem[];
+  contractChanges: ContractChange[];  // 合同变更记录（围挡重排确认后写入）
 }
 
-export type TaskStatus = 'pending' | 'claimed' | 'reported';
+export type TaskStatus = 'pending' | 'claimed' | 'reported' | 'cancelled';
+
+/** 任务类型：install=常规安装；reinstall=围挡重排产生的拆装任务 */
+export type TaskKind = 'install' | 'reinstall';
 
 export interface InstallReport {
   beforePhotos: string[];       // 安装前照片
@@ -134,6 +138,11 @@ export interface InstallTask {
   hoardingNo: string;
   teamId: string;
   status: TaskStatus;
+  kind: TaskKind;               // install / reinstall（拆装任务）
+  replanId?: string;            // 来源重排单（拆装任务）
+  affectedCreatives?: string;   // 拆装涉及画面（拆装任务）
+  cost?: number;                // 拆装费用（元，拆装任务）
+  costBearer?: ReplanResponsibility; // 拆装费用责任方
   claimedAt?: string;
   report?: InstallReport;
 }
@@ -146,6 +155,102 @@ export type TicketType =
   | 'early_removal'     // 商户要求提前撤换
   | 'dirty'             // 巡检发现脏污
   | 'length_mismatch';  // 验收长度与合同不符
+
+// ============ 工地改围挡重排 ============
+
+/** 重排变更原因（决定拆装费用责任方） */
+export type ReplanReason =
+  | 'construction_adjust'  // 施工方临时调整（责任：施工方）
+  | 'ad_company_request'   // 广告公司要求调整（责任：广告公司）
+  | 'merchant_request'     // 商户需求变更（责任：商户）
+  | 'force_majeure';      // 不可抗力/市政要求（责任：双方分担）
+
+/** 拆装费用责任方 */
+export type ReplanResponsibility = 'construction' | 'ad_company' | 'merchant' | 'shared';
+
+export type ReplanStatus = 'pending_confirm' | 'confirmed' | 'rejected';
+
+/** 画面沿围挡的排布区间（米） */
+export interface ReplanPanel {
+  creativeId: string;
+  title: string;
+  kind: CreativeKind;
+  start: number;
+  end: number;
+}
+
+/** 受影响画面（去重后） */
+export interface AffectedCreative {
+  id: string;
+  title: string;
+  kind: CreativeKind;
+}
+
+/** 拆装费用单独结算记录 */
+export interface ReplanCostSettlement {
+  amount: number;                       // 拆装费用（元）
+  bearer: ReplanResponsibility;          // 责任方
+  status: 'pending' | 'settled';
+  settledAt?: string;
+  settledBy?: string;
+}
+
+/** 围挡重排单：施工方调整围挡边界 → 页面重算 → 广告公司确认 → 合同/任务/验收同步 */
+export interface Replan {
+  id: string;
+  code: string;                       // 重排单号 CP-2026-XXXX
+  submissionId: string;
+  reason: ReplanReason;               // 变更原因
+  responsibility: ReplanResponsibility; // 责任方（由变更原因决定）
+  responsibilityStatement: string;    // 责任说明（进入合同变更记录）
+  // 边界调整
+  oldLength: number;
+  newLength: number;                  // 调整后围挡边界长度（= 可用广告长度）
+  oldHoardingNos: string[];
+  newHoardingNos: string[];
+  // 页面重算结果
+  availableLength: number;            // 可用广告长度
+  affectedCreatives: AffectedCreative[]; // 受影响画面
+  affectedPanels: ReplanPanel[];      // 受影响画面排布明细
+  affectedHoardingNos: string[];      // 受影响围挡编号
+  affectedInstalledLength: number;    // 已安装但受影响的长度（米）
+  estimatedDays: number;              // 预计重排工期（天）
+  estimatedInstallDate: string;       // 重排后预计安装完成时间
+  reinstallCost: number;              // 拆装费用（元）
+  // 流转
+  status: ReplanStatus;
+  raisedBy: string;
+  raisedByName: string;
+  createdAt: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  confirmedByName?: string;
+  rejectNote?: string;
+  // 确认后同步结果
+  reinstallTaskIds: string[];         // 生成的拆装任务
+  cancelledTaskIds: string[];         // 取消的安装任务
+  newTaskIds: string[];               // 新增围挡编号产生的安装任务
+  costSettlement?: ReplanCostSettlement; // 拆装费用单独结算（施工方原因等）
+}
+
+/** 合同变更记录（责任说明随重排确认进入） */
+export interface ContractChange {
+  id: string;
+  time: string;
+  replanId: string;
+  replanCode: string;
+  reason: ReplanReason;
+  responsibility: ReplanResponsibility;
+  statement: string;                  // 责任说明
+  oldContractLength: number;
+  newContractLength: number;
+  oldContractArea: number;            // 合同面积 = 合同长度 × 高度
+  newContractArea: number;
+  reinstallCost: number;              // 拆装费用
+  by: string;
+  byName: string;
+}
+
 
 export type TicketStatus = 'open' | 'processing' | 'resolved' | 'closed';
 
@@ -249,5 +354,6 @@ export interface DB {
   tickets: Ticket[];
   acceptances: Acceptance[];
   inspections: Inspection[];
+  replans: Replan[];
   seq: Record<string, number>;
 }

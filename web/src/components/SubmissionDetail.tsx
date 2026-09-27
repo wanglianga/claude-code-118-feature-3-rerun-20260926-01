@@ -2,7 +2,7 @@ import { Card, Col, Descriptions, Drawer, Image, Row, Space, Statistic, Table, T
 import { CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
 import { useStore } from '../store';
 import { Submission } from '../types';
-import { RISK_COLOR, RISK_LABEL, ROLE_LABEL, TYPE_LABEL } from '../dict';
+import { REPLAN_REASON_LABEL, RESPONSIBILITY_COLOR, RESPONSIBILITY_LABEL, RISK_COLOR, RISK_LABEL, ROLE_LABEL, TYPE_LABEL } from '../dict';
 import { KindTag, SubStatusTag, SubTypeTag, TaskStatusTag, TicketStatusTag, TicketTypeTag } from './Tags';
 
 const Check = ({ ok }: { ok: boolean }) =>
@@ -103,6 +103,7 @@ export default function SubmissionDetail({ submission, open, onClose }: { submis
             dataSource={myTasks}
             columns={[
               { title: '任务号', dataIndex: 'code', width: 110 },
+              { title: '类型', dataIndex: 'kind', width: 60, render: v => v === 'reinstall' ? <Tag color="orange">拆装</Tag> : <Tag>安装</Tag> },
               { title: '路段', dataIndex: 'roadSegment' },
               { title: '围挡编号', dataIndex: 'hoardingNo', width: 90 },
               { title: '状态', dataIndex: 'status', width: 80, render: v => <TaskStatusTag s={v} /> },
@@ -169,6 +170,33 @@ export default function SubmissionDetail({ submission, open, onClose }: { submis
               ))}
             </Descriptions.Item>
           </Descriptions>
+        </>
+      )}
+
+      {s.contractChanges && s.contractChanges.length > 0 && (
+        <>
+          <Typography.Title level={5} style={{ marginTop: 24 }}>七、合同变更记录（围挡重排）</Typography.Title>
+          <Table
+            size="small" rowKey="id" pagination={false}
+            dataSource={s.contractChanges}
+            columns={[
+              { title: '时间', dataIndex: 'time', width: 140 },
+              { title: '重排单', dataIndex: 'replanCode', width: 115 },
+              { title: '变更原因', dataIndex: 'reason', width: 130, render: v => REPLAN_REASON_LABEL[v as keyof typeof REPLAN_REASON_LABEL] },
+              {
+                title: '合同面积', width: 170,
+                render: (_, c) => <span>{c.oldContractLength}m/{c.oldContractArea}m² → <b>{c.newContractLength}m/{c.newContractArea}m²</b></span>,
+              },
+              {
+                title: '拆装费', width: 130,
+                render: (_, c) => c.reinstallCost > 0
+                  ? <span>¥{c.reinstallCost} <Tag color={RESPONSIBILITY_COLOR[c.responsibility]}>{RESPONSIBILITY_LABEL[c.responsibility]}</Tag></span>
+                  : '—',
+              },
+              { title: '责任说明', dataIndex: 'statement', ellipsis: true },
+              { title: '确认人', dataIndex: 'byName', width: 80 },
+            ]}
+          />
         </>
       )}
 

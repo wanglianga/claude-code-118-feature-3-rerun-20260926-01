@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  Acceptance, DB, InstallTask, Inspection, Submission, Ticket, User,
+  Acceptance, DB, InstallTask, Inspection, Replan, Submission, Ticket, User,
 } from './types';
+import { computeReplanPreview } from './replan';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
@@ -70,6 +71,7 @@ export function buildSeed(): DB {
       history: [
         { time: '2026-09-22 09:30', by: 'u_ad', byName: '李明辉', action: '提交画面审核', note: '商业广告，公益比例 30%' },
       ],
+      contractChanges: [],
     },
     {
       id: 'sub_000002', code: 'GG-2026-0002', type: 'public_welfare',
@@ -101,6 +103,7 @@ export function buildSeed(): DB {
         { time: '2026-09-21 14:05', by: 'u_st', byName: '王秀兰', action: '提交画面审核' },
         { time: '2026-09-23 10:12', by: 'u_rv', byName: '陈正审', action: '审核通过', note: '已生成 4 个安装任务' },
       ],
+      contractChanges: [],
     },
     {
       id: 'sub_000003', code: 'GG-2026-0005', type: 'safety',
@@ -132,6 +135,7 @@ export function buildSeed(): DB {
         { time: '2026-09-18 11:20', by: 'u_ad', byName: '李明辉', action: '提交画面审核' },
         { time: '2026-09-19 16:40', by: 'u_rv', byName: '陈正审', action: '审核通过', note: '已生成 8 个安装任务' },
       ],
+      contractChanges: [],
     },
     {
       id: 'sub_000004', code: 'GG-2026-0008', type: 'commercial',
@@ -163,15 +167,17 @@ export function buildSeed(): DB {
         { time: '2026-09-06 10:00', by: 'u_ad', byName: '李明辉', action: '提交画面审核' },
         { time: '2026-09-08 09:15', by: 'u_rv', byName: '陈正审', action: '审核通过', note: '已生成 5 个安装任务' },
         { time: '2026-09-14 18:20', by: 'u_tm', byName: '赵铁柱', action: '全部安装上报完成', note: '实际安装合计 98.5 米' },
+        { time: '2026-09-25 08:40', by: 'u_tm', byName: '赵铁柱', action: '发起围挡重排', note: 'CP-2026-0002：围挡边界 100m → 80m，待广告公司确认' },
       ],
+      contractChanges: [],
     },
     {
       id: 'sub_000005', code: 'GG-2026-0012', type: 'commercial',
       title: '恒信家居城国庆促销画面',
       submitterId: 'u_ad', submitterOrg: '诚信广告有限公司',
       siteName: '恒信家居城东广场工地', location: '来广营东路北侧',
-      roadSegment: '来广营东路', hoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-06'],
-      hoardingLength: 150, height: 2.5, publicRatio: 30,
+      roadSegment: '来广营东路', hoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04'],
+      hoardingLength: 100, height: 2.5, publicRatio: 30,
       creatives: [
         { id: 'cr_0010', kind: 'public', title: '消防安全公益画面', sizeSpec: '6m×2.5m', textContent: '关注消防 生命至上', theme: '消防安全', sensitiveRisk: 'none', sightImpact: 'none', imageUrl: imgCreative2 },
         { id: 'cr_0011', kind: 'commercial', title: '恒信国庆促销画面', sizeSpec: '6m×2.5m', textContent: '国庆大放价 满 10000 减 1500', theme: '', brandName: '恒信家居', sensitiveRisk: 'none', sightImpact: 'none', imageUrl: imgCreative1 },
@@ -182,7 +188,7 @@ export function buildSeed(): DB {
       nightLighting: true, lightingDesc: 'LED 灯带 18:30-22:00',
       constructionTeamId: 'u_tm',
       acceptanceRequirements: '画面平整无破损，促销内容与时效一致',
-      merchantId: 'u_mc2', contractLength: 150, unitPrice: 160,
+      merchantId: 'u_mc2', contractLength: 100, unitPrice: 160,
       status: 'accepted',
       review: {
         reviewerId: 'u_rv',
@@ -195,6 +201,19 @@ export function buildSeed(): DB {
         { time: '2026-08-30 15:00', by: 'u_rv', byName: '陈正审', action: '审核通过', note: '已生成 6 个安装任务' },
         { time: '2026-09-04 17:30', by: 'u_tm', byName: '赵铁柱', action: '全部安装上报完成', note: '实际安装合计 150 米' },
         { time: '2026-09-06 10:30', by: 'u_rv', byName: '陈正审', action: '验收完成', note: '验收长度 150 米，扣款 800 元，待财务结算' },
+        { time: '2026-09-20 09:10', by: 'u_tm', byName: '赵铁柱', action: '发起围挡重排', note: 'CP-2026-0001：围挡边界 150m → 100m，待广告公司确认' },
+        { time: '2026-09-21 10:25', by: 'u_ad', byName: '李明辉', action: '确认围挡重排', note: '合同长度 150m→100m，生成 2 个拆装任务，拆装费 ¥5625 由施工方承担单独结算' },
+      ],
+      contractChanges: [
+        {
+          id: 'change_000001', time: '2026-09-21 10:25', replanId: 'replan_000001', replanCode: 'CP-2026-0001',
+          reason: 'construction_adjust', responsibility: 'construction',
+          statement: '施工方因地下管线迁改，需将 LG-05、LG-06 段围挡内收 50 米；已安装画面拆装费用由施工方承担并单独结算，不影响广告公司原合同结算。',
+          oldContractLength: 150, newContractLength: 100,
+          oldContractArea: 375, newContractArea: 250,
+          reinstallCost: 5625,
+          by: 'u_ad', byName: '李明辉',
+        },
       ],
     },
     {
@@ -226,6 +245,7 @@ export function buildSeed(): DB {
         { time: '2026-09-19 16:00', by: 'u_ad', byName: '李明辉', action: '提交画面审核' },
         { time: '2026-09-20 11:00', by: 'u_rv', byName: '陈正审', action: '审核驳回', note: '文案违规 + 公益比例不足' },
       ],
+      contractChanges: [],
     },
   ];
 
@@ -238,6 +258,7 @@ export function buildSeed(): DB {
       id: `task_${String(rwSeq).padStart(6, '0')}`,
       code: `RW-2026-${String(rwSeq).padStart(4, '0')}`,
       submissionId, roadSegment, hoardingNo, teamId, status, claimedAt, report,
+      kind: 'install',
     };
   };
   const rep = (len: number, by: string, byName: string, time: string, extra?: Partial<InstallTask['report']>): NonNullable<InstallTask['report']> => ({
@@ -269,6 +290,19 @@ export function buildSeed(): DB {
     tasks.push(mkTask('sub_000005', '来广营东路', no, 'u_tm', 'reported',
       rep(25, 'u_tm', '赵铁柱', `2026-09-0${i + 1} 16:30`), `2026-09-0${i + 1} 08:00`));
   });
+  // S5 重排拆装任务（重排单 CP-2026-0001 确认后生成）：LG-05、LG-06 已安装画面拆装，费用施工方承担
+  const reinstallTasks: InstallTask[] = ['LG-05', 'LG-06'].map(no => {
+    rwSeq += 1;
+    return {
+      id: `task_${String(rwSeq).padStart(6, '0')}`,
+      code: `RW-2026-${String(rwSeq).padStart(4, '0')}`,
+      submissionId: 'sub_000005', roadSegment: '来广营东路', hoardingNo: no, teamId: 'u_tm',
+      status: 'pending', kind: 'reinstall', replanId: 'replan_000001',
+      affectedCreatives: '消防安全公益画面、恒信国庆促销画面',
+      cost: 2812.5, costBearer: 'construction',
+    };
+  });
+  tasks.push(...reinstallTasks);
 
   // ============ 异常工单 ============
   const tickets: Ticket[] = [
@@ -326,18 +360,19 @@ export function buildSeed(): DB {
     },
   ];
 
-  // ============ 验收单（S5 已验收，待财务结算） ============
+  // ============ 验收单（S5 已验收，待财务结算；重排 CP-2026-0001 确认后已同步更新） ============
   const acceptances: Acceptance[] = [
     {
       id: 'acc_000001', code: 'YS-2026-0001', submissionId: 'sub_000005',
-      acceptedLength: 150, contractLength: 150, height: 2.5,
-      settleableArea: 375, publicArea: 112.5, commercialArea: 262.5,
-      unitPrice: 160, grossAmount: 42000,
+      acceptedLength: 100, contractLength: 100, height: 2.5,
+      settleableArea: 250, publicArea: 75, commercialArea: 175,
+      unitPrice: 160, grossAmount: 28000,
       deductions: [{ reason: '画面被风吹破（GD-2026-0001）', amount: 800, ticketId: 'ticket_000001' }],
-      totalDeduction: 800, settleAmount: 41200,
+      totalDeduction: 800, settleAmount: 27200,
       rectifications: [
         { id: 'rect_000001', desc: '更换 LG-03 破损画面（GD-2026-0001）', assigneeRole: 'construction', deadline: '2026-09-15', status: 'done', ticketId: 'ticket_000001' },
         { id: 'rect_000002', desc: '清洗 LG-02 脏污画面（GD-2026-0002）', assigneeRole: 'construction', deadline: '2026-09-25', status: 'open', ticketId: 'ticket_000002' },
+        { id: 'rect_000003', desc: '重排单 CP-2026-0001：按新边界复核画面安装与验收长度（LG-05、LG-06 拆装后复查）', assigneeRole: 'construction', deadline: '2026-09-28', status: 'open' },
       ],
       inspectionPlan: [
         { id: 'insp_000001', date: '2026-09-18', inspectorId: 'u_in', focus: '画面完整性与公益比例', status: 'done' },
@@ -346,7 +381,7 @@ export function buildSeed(): DB {
         { id: 'insp_000004', date: '2026-10-09', inspectorId: 'u_in', focus: '撤换前综合检查', status: 'planned' },
       ],
       status: 'pending_finance',
-      comment: '安装长度与合同一致，画面质量合格；存在 1 起破损已整改，扣款 800 元。',
+      comment: '安装长度与合同一致，画面质量合格；存在 1 起破损已整改，扣款 800 元。2026-09-21 围挡重排 CP-2026-0001 确认：合同长度 150m→100m，验收清单已同步更新。',
       acceptedBy: 'u_rv', acceptedByName: '陈正审', createdAt: '2026-09-06 10:30',
     },
   ];
@@ -364,11 +399,68 @@ export function buildSeed(): DB {
     { id: 'insp_rec_000004', planItemId: 'insp_000004', acceptanceId: 'acc_000001', submissionId: 'sub_000005', date: '2026-10-09', inspectorId: 'u_in', focus: '撤换前综合检查', status: 'planned' },
   ];
 
+  // ============ 围挡重排单 ============
+  // CP-2026-0001：S5 已确认（150m→100m，LG-05/LG-06 拆装，费用施工方单独结算）
+  const s5 = submissions.find(x => x.id === 'sub_000005')!;
+  const rp1Preview = computeReplanPreview(
+    { hoardingLength: 150, hoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-06'], height: s5.height, creatives: s5.creatives },
+    tasks.filter(t => t.submissionId === 'sub_000005' && t.kind === 'install'),
+    100, ['LG-01', 'LG-02', 'LG-03', 'LG-04'], '2026-09-20',
+  );
+  // CP-2026-0002：S4 待广告公司确认（100m→80m，FT-05 已安装 18.5m 需拆装）
+  const s4 = submissions.find(x => x.id === 'sub_000004')!;
+  const rp2Preview = computeReplanPreview(
+    s4, tasks.filter(t => t.submissionId === 'sub_000004'), 80, undefined, '2026-09-25',
+  );
+  const replans: Replan[] = [
+    {
+      id: 'replan_000001', code: 'CP-2026-0001', submissionId: 'sub_000005',
+      reason: 'construction_adjust', responsibility: 'construction',
+      responsibilityStatement: '施工方因地下管线迁改，需将 LG-05、LG-06 段围挡内收 50 米；已安装画面拆装费用由施工方承担并单独结算，不影响广告公司原合同结算。',
+      oldLength: 150, newLength: 100,
+      oldHoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04', 'LG-05', 'LG-06'],
+      newHoardingNos: ['LG-01', 'LG-02', 'LG-03', 'LG-04'],
+      availableLength: rp1Preview.availableLength,
+      affectedCreatives: rp1Preview.affectedCreatives,
+      affectedPanels: rp1Preview.affectedPanels,
+      affectedHoardingNos: rp1Preview.affectedHoardingNos,
+      affectedInstalledLength: rp1Preview.affectedInstalledLength,
+      estimatedDays: rp1Preview.estimatedDays,
+      estimatedInstallDate: rp1Preview.estimatedInstallDate,
+      reinstallCost: rp1Preview.reinstallCost,
+      status: 'confirmed',
+      raisedBy: 'u_tm', raisedByName: '赵铁柱', createdAt: '2026-09-20 09:10',
+      confirmedAt: '2026-09-21 10:25', confirmedBy: 'u_ad', confirmedByName: '李明辉',
+      reinstallTaskIds: reinstallTasks.map(t => t.id), cancelledTaskIds: [], newTaskIds: [],
+      costSettlement: { amount: rp1Preview.reinstallCost, bearer: 'construction', status: 'pending' },
+    },
+    {
+      id: 'replan_000002', code: 'CP-2026-0002', submissionId: 'sub_000004',
+      reason: 'construction_adjust', responsibility: 'construction',
+      responsibilityStatement: '施工方临时调整：FT-05 段临近配电箱与绿化带无法继续覆盖，围挡内收 20 米；FT-05 已安装画面拆装费用由施工方承担并单独结算。',
+      oldLength: 100, newLength: 80,
+      oldHoardingNos: ['FT-01', 'FT-02', 'FT-03', 'FT-04', 'FT-05'],
+      newHoardingNos: rp2Preview.newHoardingNos,
+      availableLength: rp2Preview.availableLength,
+      affectedCreatives: rp2Preview.affectedCreatives,
+      affectedPanels: rp2Preview.affectedPanels,
+      affectedHoardingNos: rp2Preview.affectedHoardingNos,
+      affectedInstalledLength: rp2Preview.affectedInstalledLength,
+      estimatedDays: rp2Preview.estimatedDays,
+      estimatedInstallDate: rp2Preview.estimatedInstallDate,
+      reinstallCost: rp2Preview.reinstallCost,
+      status: 'pending_confirm',
+      raisedBy: 'u_tm', raisedByName: '赵铁柱', createdAt: '2026-09-25 08:40',
+      reinstallTaskIds: [], cancelledTaskIds: [], newTaskIds: [],
+    },
+  ];
+
   return {
-    users, submissions, tasks, tickets, acceptances, inspections,
+    users, submissions, tasks, tickets, acceptances, inspections, replans,
     seq: {
-      code_GG: 15, code_GD: 4, code_YS: 1, code_RW: rwSeq,
-      id_sub: 6, id_task: rwSeq, id_ticket: 4, id_acc: 1, id_insp_rec: 4, id_rect: 2, id_insp: 4, id_cr: 12,
+      code_GG: 15, code_GD: 4, code_YS: 1, code_RW: rwSeq, code_CP: 2,
+      id_sub: 6, id_task: rwSeq, id_ticket: 4, id_acc: 1, id_insp_rec: 4, id_rect: 3, id_insp: 4, id_cr: 12,
+      id_replan: 2, id_change: 1,
     },
   };
 }
